@@ -1,0 +1,57 @@
+# Local development infrastructure only: Postgres + Redis.
+# App containers + nginx come in Phase 11 (see specs/result/07_Build_Plan.md).
+#
+#   bun run infra:up      start (returns once both are healthy)
+#   bun run infra:down    stop, keep data
+#   bun run infra:reset   stop and DELETE volumes (init scripts re-run on next start)
+#   bun run infra:logs    follow logs (lock waits show up here)
+
+name: hacker-house
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hacker}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hacker}
+      POSTGRES_DB: ${POSTGRES_DB:-hacker_house}
+      TZ: UTC
+      PGTZ: UTC
+    command:
+      - postgres
+      # Log any lock wait longer than deadlock_timeout (1s): shows which pid blocked which.
+      - -c
+      - log_lock_waits=on
+      - -c
+      - deadlock_timeout=1s
+      - -c
+      - timezone=UTC
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      # Postgres 18 images keep data under /var/lib/postgresql/<major>/docker.
+      - pgdata:/var/lib/postgresql
+      # Runs ONLY when the data volume is empty (first start or after infra:reset).
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    # Ephemeral by design (pub/sub + rate-limit counters): no RDB snapshots, no AOF.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pgdata:
