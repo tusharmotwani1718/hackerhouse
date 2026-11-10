@@ -44,3 +44,16 @@ The app validates its environment at startup and exits with a list of invalid va
 | `bun run db:migrate -- --name x`  | Create + apply a migration (`--create-only` to hand-edit SQL first)             |
 | `bun run db:deploy`               | Apply pending migrations                                                        |
 | `bun run db:studio`               | Open Prisma Studio                                                              |
+| `bun run admin <command>`         | Admin CLI: `create`, `promote`, `demote`, `list`, `reset-password` (`--help`)   |
+
+## Admin accounts
+
+Admins can only be created from the command line, never through the API:
+
+```sh
+bun run admin create --email you@example.com --name "Your Name"   # prompts for the password
+bun run admin list
+```
+
+Passwords are never passed as arguments; use the prompt, or pipe one in with `--password-stdin`.
+`reset-password` also signs the user out of every session.
