@@ -1,0 +1,73 @@
+# Step 0.4 probe (dev only). Run `bun run dev`, then send requests with the VS Code
+# "REST Client" extension (humao.rest-client) or copy them into curl.
+@base = http://localhost:3000/api/dev/probe
+
+### Success envelope + X-Request-Id header  → 200
+GET {{base}}/ok
+
+### Incoming request id is echoed back  → 200, X-Request-Id: my-trace-12345
+GET {{base}}/ok
+X-Request-Id: my-trace-12345
+
+### Valid body  → 201
+POST {{base}}/validation
+Content-Type: application/json
+
+{ "name": "Rocket", "size": 4 }
+
+### Schema failure  → 400 VALIDATION_FAILED with details
+POST {{base}}/validation
+Content-Type: application/json
+
+{ "name": "R", "size": 99 }
+
+### Malformed JSON  → 400 VALIDATION_FAILED
+POST {{base}}/validation
+Content-Type: application/json
+
+{ "name": "Rocket",
+
+### Wrong content type  → 415 UNSUPPORTED_MEDIA_TYPE
+POST {{base}}/validation
+Content-Type: text/plain
+
+hello
+
+### Business error  → 403 FORBIDDEN
+GET {{base}}/app-error
+
+### Unexpected error  → 500 INTERNAL, generic message (details only in the server log)
+GET {{base}}/crash
+
+### Unique violation, unmapped  → 409 CONFLICT (generic message)
+GET {{base}}/unique
+
+### Unique violation, mapped by constraint name  → 409 with the flow's message
+GET {{base}}/unique-mapped
+
+### CHECK violation  → 500 (safety net caught a bug; logged as error)
+GET {{base}}/check
+
+### Deferred FK fails at COMMIT  → 500 (logged with atCommit=true)
+GET {{base}}/deferred-fk
+
+### Lock wait > lock_timeout  → 503 RETRY_LATER after ~DATABASE_LOCK_TIMEOUT_MS, Retry-After: 1
+GET {{base}}/lock-timeout
+
+### Events published after COMMIT  → 200; log shows "event published" after "before COMMIT"
+GET {{base}}/events
+
+### Rolled back  → 409; log shows NO "event published"
+GET {{base}}/events-rollback
+
+### Read snapshot  → 200 { isolation: "repeatable read", readOnly: "on" }
+GET {{base}}/snapshot
+
+### Write inside a read snapshot  → 500 (25006, a bug)
+GET {{base}}/snapshot-write
+
+### Unknown case  → 400 VALIDATION_FAILED (path parameter)
+GET {{base}}/nope
+
+### Unknown API path  → 404 NOT_FOUND in the error envelope
+GET http://localhost:3000/api/does-not-exist

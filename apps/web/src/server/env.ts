@@ -38,6 +38,10 @@ const schema = z
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
     DATABASE_URL: urlWithProtocol(["postgres:", "postgresql:"]),
     REDIS_URL: urlWithProtocol(["redis:", "rediss:"]),
+    LOG_LEVEL: z.preprocess(
+      (value) => (value === "" ? undefined : value),
+      z.enum(["debug", "info", "warn", "error"]).default("info"),
+    ),
 
     // Connection pool + transaction timing (see 07_Build_Plan.md §6 for the budget rule).
     DATABASE_POOL_MAX: intWithDefault(10, 1, 50),
