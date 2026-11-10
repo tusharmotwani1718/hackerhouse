@@ -1,0 +1,45 @@
+# Step 2.2 — registration (Flow 5). Run `bun run dev`; VS Code "REST Client" keeps cookies.
+# Needs a hackathon (see hackathons.http) and a user with a complete profile (see profile in /api/me).
+@base = http://localhost:3000
+@origin = http://localhost:3000
+@hackathon = hackfest-2026
+
+### Sign in
+POST {{base}}/api/auth/sign-in/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{ "email": "pat@example.com", "password": "REPLACE_ME" }
+
+### My status before registering → registered: false (200, not 404)
+GET {{base}}/api/hackathons/{{hackathon}}/me
+
+### Register → 201 (body must be {}; the JSON content type is required)
+POST {{base}}/api/hackathons/{{hackathon}}/register
+Content-Type: application/json
+Origin: {{origin}}
+
+{}
+
+### Again → 409 ALREADY_REGISTERED
+POST {{base}}/api/hackathons/{{hackathon}}/register
+Content-Type: application/json
+Origin: {{origin}}
+
+{}
+
+### My status after → registered: true, participantId, registeredAt
+GET {{base}}/api/hackathons/{{hackathon}}/me
+
+### Detail now counts participants
+GET {{base}}/api/hackathons/{{hackathon}}
+
+### Unknown hackathon → 404 HACKATHON_NOT_FOUND
+POST {{base}}/api/hackathons/no-such-hackathon/register
+Content-Type: application/json
+Origin: {{origin}}
+
+{}
+
+### A user without a GitHub username or skills → 409 PROFILE_INCOMPLETE, details.missing
+# (sign in as that user first)

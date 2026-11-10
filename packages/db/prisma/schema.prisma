@@ -48,8 +48,9 @@ model User {
 
   sessions   Session[]
   accounts   Account[]
-  skills     UserSkill[]
-  hackathons Hackathon[]
+  skills       UserSkill[]
+  hackathons   Hackathon[]
+  participants Participant[]
 
   @@map("users")
 }
@@ -75,10 +76,36 @@ model Hackathon {
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
-  createdBy User @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdBy    User          @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  participants Participant[]
 
   @@index([createdByUserId])
   @@map("hackathons")
+}
+
+// ---------------------------------------------------------------------------
+// Participants (step 2.2, 02 §3.3): a user registered in a hackathon. The row is the lock
+// target for "this user in this hackathon" in later flows (I1). Team membership columns
+// (team_id, team_joined_at + their CHECK, composite FK and indexes) arrive in step 3.3.
+// ---------------------------------------------------------------------------
+
+model Participant {
+  id          String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  hackathonId String   @map("hackathon_id") @db.Uuid
+  /// Registration time.
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hackathon Hackathon @relation(fields: [hackathonId], references: [id], onDelete: Restrict)
+
+  /// R3: register once per hackathon. Also resolves concurrent duplicate registrations (Flow 5).
+  @@unique([userId, hackathonId])
+  /// Target for composite FKs (teams, join requests) that pin rows to the same hackathon.
+  @@unique([id, hackathonId])
+  /// Stats counts; the (user_id, hackathon_id) index leads with user_id, so it can't serve them.
+  @@index([hackathonId])
+  @@map("participants")
 }
 
 // ---------------------------------------------------------------------------

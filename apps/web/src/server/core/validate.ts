@@ -1,11 +1,17 @@
 import "server-only";
 
-import type { z } from "zod";
+import { z } from "zod";
 
 import { AppError } from "./errors";
 
 /** Largest accepted JSON body. Our biggest real payload (a profile) is < 2 KB. */
 export const MAX_BODY_BYTES = 64 * 1024;
+
+/**
+ * Body of a POST that carries no data (e.g. register): must be exactly `{}`. Still parsed with
+ * parseJson, so the JSON content-type rule (our CSRF defence) holds for every mutation.
+ */
+export const emptyBodySchema = z.strictObject({}, { error: "request body must be {}" });
 
 function validationError(issues: readonly z.core.$ZodIssue[], where: string): AppError {
   return new AppError("VALIDATION_FAILED", `Invalid ${where}.`, {

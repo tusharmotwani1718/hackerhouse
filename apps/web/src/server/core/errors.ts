@@ -20,6 +20,10 @@ export const ERROR_CODES = {
   // Hackathons (step 2.1)
   HACKATHON_NOT_FOUND: 404,
   SLUG_TAKEN: 409,
+
+  // Participants (step 2.2)
+  PROFILE_INCOMPLETE: 409,
+  ALREADY_REGISTERED: 409,
 } as const satisfies Record<string, number>;
 
 export type ErrorCode = keyof typeof ERROR_CODES;

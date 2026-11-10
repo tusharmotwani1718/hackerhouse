@@ -65,8 +65,11 @@ export async function listHackathons(tx: Tx): Promise<Hackathon[]> {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Look up by uuid if the value looks like one, else by slug (case-insensitive); or 404. */
-export async function getHackathon(tx: Tx, idOrSlug: string): Promise<Hackathon> {
+/**
+ * Every `/api/hackathons/{idOrSlug}/...` route starts here: by uuid if the value looks like one,
+ * else by slug (case-insensitive); or 404 HACKATHON_NOT_FOUND.
+ */
+export async function resolveHackathon(tx: Tx, idOrSlug: string): Promise<Hackathon> {
   const value = idOrSlug.trim();
   const hackathon = await tx.hackathon.findUnique({
     where: UUID.test(value) ? { id: value } : { slug: value.toLowerCase() },
@@ -74,4 +77,16 @@ export async function getHackathon(tx: Tx, idOrSlug: string): Promise<Hackathon>
   });
   if (!hackathon) throw new AppError("HACKATHON_NOT_FOUND", "Hackathon not found.");
   return hackathon;
+}
+
+export type HackathonDetail = Hackathon & {
+  /** `teams` and `lookingTeams` join in step 3.6 (05 §4.7). */
+  stats: { participants: number };
+};
+
+/** Two queries → call inside runReadTx so they see one snapshot (RD2). */
+export async function getHackathon(tx: Tx, idOrSlug: string): Promise<HackathonDetail> {
+  const hackathon = await resolveHackathon(tx, idOrSlug);
+  const participants = await tx.participant.count({ where: { hackathonId: hackathon.id } });
+  return { ...hackathon, stats: { participants } };
 }
