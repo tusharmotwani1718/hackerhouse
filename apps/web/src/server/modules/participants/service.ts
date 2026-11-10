@@ -1,5 +1,6 @@
 import "server-only";
 
+import { writeAudit } from "../../core/audit";
 import { AppError } from "../../core/errors";
 import type { ConstraintErrors } from "../../core/pg-errors";
 import type { Tx } from "../../core/tx";
@@ -71,7 +72,16 @@ export async function register(
     throw new AppError("ALREADY_REGISTERED", "You are already registered for this hackathon.");
   }
 
-  // TODO(3.1): audit PARTICIPANT_REGISTERED. TODO(3.2): store the response. No SSE event (Flow 5).
+  await writeAudit(tx, [
+    {
+      action: "PARTICIPANT_REGISTERED",
+      hackathonId: hackathon.id,
+      actorUserId: userId,
+      metadata: { participantId: row.id },
+    },
+  ]);
+
+  // TODO(3.2): store the response. No SSE event (Flow 5).
   return { registered: true, participantId: row.id, registeredAt: row.created_at, team: null };
 }
 

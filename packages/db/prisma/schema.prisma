@@ -46,11 +46,12 @@ model User {
   /// Canonical IANA name (validated in the app against tzdata; R16).
   timezone       String  @default("Asia/Kolkata")
 
-  sessions   Session[]
-  accounts   Account[]
+  sessions     Session[]
+  accounts     Account[]
   skills       UserSkill[]
   hackathons   Hackathon[]
   participants Participant[]
+  inviteCodes  InviteCode[]
 
   @@map("users")
 }
@@ -78,34 +79,189 @@ model Hackathon {
 
   createdBy    User          @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
   participants Participant[]
+  teams        Team[]
 
+  /// Target of the teams FK (hackathon_id, max_size): a team's max_size always equals this.
+  @@unique([id, maxTeamSize])
   @@index([createdByUserId])
   @@map("hackathons")
 }
 
 // ---------------------------------------------------------------------------
 // Participants (step 2.2, 02 §3.3): a user registered in a hackathon. The row is the lock
-// target for "this user in this hackathon" in later flows (I1). Team membership columns
-// (team_id, team_joined_at + their CHECK, composite FK and indexes) arrive in step 3.3.
+// target for "this user in this hackathon" in later flows (I1). Membership = team_id on this
+// row (02 §2): one column → at most one team per hackathon (R2), structurally.
 // ---------------------------------------------------------------------------
 
 model Participant {
-  id          String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  userId      String   @map("user_id") @db.Uuid
-  hackathonId String   @map("hackathon_id") @db.Uuid
+  id           String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  hackathonId  String    @map("hackathon_id") @db.Uuid
+  /// Changes only under this row's lock AND the team's lock (I2, I3). Step 3.1.
+  teamId       String?   @map("team_id") @db.Uuid
+  /// Set iff team_id is set (hand-written CHECK). Oldest member succeeds a leaving leader (R6).
+  teamJoinedAt DateTime? @map("team_joined_at") @db.Timestamptz
   /// Registration time.
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   hackathon Hackathon @relation(fields: [hackathonId], references: [id], onDelete: Restrict)
+  /// Composite FK: the team must be in the SAME hackathon. RESTRICT: a team with members
+  /// can't be deleted (R7 safety net). Unchecked while team_id is NULL (MATCH SIMPLE).
+  team      Team?     @relation("members", fields: [teamId, hackathonId], references: [id, hackathonId], onDelete: Restrict, onUpdate: Restrict, map: "participants_team_fkey")
+  /// Back side of teams_leader_fkey (a list: Prisma would otherwise demand a unique index).
+  leads     Team[]    @relation("leader")
 
   /// R3: register once per hackathon. Also resolves concurrent duplicate registrations (Flow 5).
   @@unique([userId, hackathonId])
   /// Target for composite FKs (teams, join requests) that pin rows to the same hackathon.
   @@unique([id, hackathonId])
+  /// Target for teams_leader_fkey: "the leader is a member of THIS team".
+  @@unique([id, teamId])
   /// Stats counts; the (user_id, hackathon_id) index leads with user_id, so it can't serve them.
   @@index([hackathonId])
+  /// List members; find the next leader (oldest member). Also serves participants_team_fkey.
+  @@index([teamId, teamJoinedAt])
   @@map("participants")
+}
+
+// ---------------------------------------------------------------------------
+// Teams (step 3.1, 02 §3.4). The row is the lock target for "a seat on this team" (I1).
+// ---------------------------------------------------------------------------
+
+enum JoinPolicy {
+  OPEN
+  APPROVAL
+
+  @@map("join_policy")
+}
+
+enum TeamAccess {
+  PUBLIC
+  INVITE_ONLY
+
+  @@map("team_access")
+}
+
+model Team {
+  id                  String     @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  /// Immutable (hand-written trigger teams_immutable_columns).
+  hackathonId         String     @map("hackathon_id") @db.Uuid
+  /// 3–40 chars, trimmed (hand-written CHECK). Unique per hackathon, case-insensitive (R18):
+  /// hand-written unique index on (hackathon_id, lower(name)).
+  name                String
+  /// 0–500 chars (hand-written CHECK).
+  description         String     @default("")
+  /// Immutable (trigger).
+  joinPolicy          JoinPolicy @map("join_policy")
+  /// Immutable (trigger).
+  access              TeamAccess
+  /// Board listing only; does not block joins (R21).
+  isLooking           Boolean    @default(true) @map("is_looking")
+  /// Exactly one leader, who is a member (R4): deferred composite FK teams_leader_fkey.
+  leaderParticipantId String     @map("leader_participant_id") @db.Uuid
+  /// Denormalized; changed only under the team lock. 1 ≤ member_count ≤ max_size (CHECK, R1/R5/R7).
+  memberCount         Int        @map("member_count") @db.SmallInt
+  /// Copied from the hackathon; the FK (hackathon_id, max_size) keeps it equal. Immutable (trigger).
+  maxSize             Int        @map("max_size") @db.SmallInt
+  /// +1 on every change (SSE ordering). ≥ 1 (CHECK).
+  version             Int        @default(1)
+  createdAt           DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  /// Prisma sets this only for model-API writes; raw SQL updates must set it (team-update helper, 3.3).
+  updatedAt           DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+
+  /// One FK does both jobs: the hackathon exists AND max_size equals its max_team_size.
+  hackathon   Hackathon     @relation(fields: [hackathonId, maxSize], references: [id, maxTeamSize], onDelete: Restrict, onUpdate: Restrict, map: "teams_hackathon_fkey")
+  /// (leader_participant_id, id) → participants (id, team_id): the leader's team_id must be
+  /// THIS team. Hand-written DEFERRABLE INITIALLY DEFERRED → checked at COMMIT (08 §S3).
+  leader      Participant   @relation("leader", fields: [leaderParticipantId, id], references: [id, teamId], onDelete: NoAction, onUpdate: NoAction, map: "teams_leader_fkey")
+  members     Participant[] @relation("members")
+  inviteCodes InviteCode[]
+
+  /// Target for composite FKs (participants, join requests).
+  @@unique([id, hackathonId])
+  /// All Teams list (keyset order, 05 RD3). The board's partial index is hand-written.
+  @@index([hackathonId, createdAt(sort: Desc), id(sort: Desc)])
+  /// Name search: ILIKE '%q%' (needs pg_trgm, created at the top of the migration).
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "teams_name_trgm_idx")
+  /// Changing a participant's team_id re-checks teams_leader_fkey from this side → needs an index.
+  @@index([leaderParticipantId])
+  @@map("teams")
+}
+
+// ---------------------------------------------------------------------------
+// Invite codes (step 3.1, 02 §3.5). Never exposed publicly; generated in step 3.3.
+// ---------------------------------------------------------------------------
+
+model InviteCode {
+  id              String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  teamId          String    @map("team_id") @db.Uuid
+  /// 10 chars Crockford base32, uppercase, no hyphens (hand-written CHECK). Unique.
+  code            String    @unique
+  /// > created_at (hand-written CHECK); the 1h–30d bound is validated in the app.
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz
+  /// At most one non-revoked code per team (hand-written partial unique index).
+  revokedAt       DateTime? @map("revoked_at") @db.Timestamptz
+  createdByUserId String    @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  team      Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdBy User @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  /// Serves the cascade from teams (the partial unique index covers active codes only).
+  @@index([teamId])
+  @@index([createdByUserId])
+  @@map("invite_codes")
+}
+
+// ---------------------------------------------------------------------------
+// Audit log (step 3.1, 02 §3.8). Append-only (hand-written trigger). NO foreign keys on
+// purpose: history must outlive deleted teams, participants and users.
+// ---------------------------------------------------------------------------
+
+enum AuditAction {
+  PARTICIPANT_REGISTERED
+  PARTICIPANT_WITHDREW
+  TEAM_CREATED
+  TEAM_DELETED
+  MEMBER_JOINED
+  MEMBER_LEFT
+  MEMBER_REMOVED
+  LEADER_CHANGED
+  REQUEST_CREATED
+  REQUEST_APPROVED
+  REQUEST_DECLINED
+  REQUEST_CANCELLED
+  LOOKING_TOGGLED
+  INVITE_CODE_GENERATED
+  INVITE_CODE_REVOKED
+  // Admin actions (3.1 decision D4): not tied to a team; visible via the admin audit endpoint only.
+  HACKATHON_CREATED
+  ADMIN_CREATED
+  USER_PROMOTED
+  USER_DEMOTED
+  PASSWORD_RESET
+
+  @@map("audit_action")
+}
+
+model AuditLog {
+  id           String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  /// NULL for actions not tied to a hackathon (admin CLI).
+  hackathonId  String?     @map("hackathon_id") @db.Uuid
+  teamId       String?     @map("team_id") @db.Uuid
+  /// NULL = done from the admin CLI (no signed-in user).
+  actorUserId  String?     @map("actor_user_id") @db.Uuid
+  targetUserId String?     @map("target_user_id") @db.Uuid
+  action       AuditAction
+  metadata     Json        @default("{}")
+  /// Correlates with request log lines; NULL for CLI actions.
+  requestId    String?     @map("request_id")
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([teamId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([hackathonId, createdAt(sort: Desc), id(sort: Desc)])
+  @@map("audit_logs")
 }
 
 // ---------------------------------------------------------------------------

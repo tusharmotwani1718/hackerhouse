@@ -7,10 +7,11 @@
  * Next). It uses @hacker-house/db + Better Auth's own hashPassword, so hashes match sign-in.
  */
 import { existsSync, readFileSync } from "node:fs";
+import { userInfo } from "node:os";
 import path from "node:path";
 import { parseArgs, parseEnv } from "node:util";
 
-import { createDbClient, Prisma } from "@hacker-house/db";
+import { createDbClient, Prisma, type AuditAction } from "@hacker-house/db";
 import { hashPassword } from "better-auth/crypto";
 import { z } from "zod";
 
@@ -142,6 +143,40 @@ type Options = { email?: string; name?: string; "password-stdin"?: boolean };
 
 const LOCK_TIMEOUT = "SET LOCAL lock_timeout = '5s'";
 
+function osUser(): string {
+  try {
+    return userInfo().username;
+  } catch {
+    return "unknown";
+  }
+}
+
+/**
+ * Audit row for a CLI action (step 3.1, D4), written in the action's own transaction.
+ * No hackathon, no signed-in actor (NULL = CLI), no request id; `osUser` says who ran it.
+ * Same columns as the app's writeAudit, which this script can't import (server-only).
+ */
+async function auditCli(
+  tx: Prisma.TransactionClient,
+  action: Extract<
+    AuditAction,
+    "ADMIN_CREATED" | "USER_PROMOTED" | "USER_DEMOTED" | "PASSWORD_RESET"
+  >,
+  targetUserId: string,
+  metadata: Record<string, string | number>,
+) {
+  await tx.auditLog.create({
+    data: {
+      action,
+      hackathonId: null,
+      actorUserId: null,
+      targetUserId,
+      requestId: null,
+      metadata: { via: "cli", osUser: osUser(), ...metadata },
+    },
+  });
+}
+
 async function findUser(db: Db, email: string) {
   const user = await db.user.findUnique({ where: { email } });
   if (!user) throw new CliError(`No user with email ${email}.`);
@@ -158,7 +193,7 @@ async function create(db: Db, options: Options) {
   const hash = await hashPassword(password); // scrypt (~70 ms) — before the transaction, not inside
 
   try {
-    // One transaction: user + credential account exist together or not at all.
+    // One transaction: user + credential account + audit row exist together or not at all.
     const user = await db.$transaction(async (tx) => {
       const created = await tx.user.create({ data: { email, name, role: "ADMIN" } });
       await tx.account.create({
@@ -169,6 +204,7 @@ async function create(db: Db, options: Options) {
           password: hash,
         },
       });
+      await auditCli(tx, "ADMIN_CREATED", created.id, { email });
       return created;
     });
     console.log(`✔ Created admin ${user.email} (id ${user.id})`);
@@ -184,8 +220,17 @@ async function create(db: Db, options: Options) {
 async function promote(db: Db, options: Options) {
   const email = check(emailSchema, options.email);
   const user = await findUser(db, email);
-  if (user.role === "ADMIN") return console.log(`• ${email} is already an admin.`);
-  await db.user.update({ where: { id: user.id }, data: { role: "ADMIN" } });
+  // Conditional update instead of "read role, then update": if two promotes race, only the
+  // one that actually changes the role gets count 1 and writes the audit row.
+  const promoted = await db.$transaction(async (tx) => {
+    const { count } = await tx.user.updateMany({
+      where: { id: user.id, role: "USER" },
+      data: { role: "ADMIN" },
+    });
+    if (count === 1) await auditCli(tx, "USER_PROMOTED", user.id, { email });
+    return count === 1;
+  });
+  if (!promoted) return console.log(`• ${email} is already an admin.`);
   console.log(`✔ ${email} is now an admin (effective on their next request).`);
 }
 
@@ -211,6 +256,7 @@ async function demote(db: Db, options: Options) {
     }
     if (testHoldMs > 0) await new Promise((resolve) => setTimeout(resolve, testHoldMs));
     await tx.user.update({ where: { id: target.id }, data: { role: "USER" } });
+    await auditCli(tx, "USER_DEMOTED", target.id, { email });
   });
   console.log(`✔ ${email} is now a regular user (effective on their next request).`);
 }
@@ -241,10 +287,11 @@ async function resetPassword(db: Db, options: Options) {
   const password = await readNewPassword(Boolean(options["password-stdin"]));
   const hash = await hashPassword(password);
 
-  // One transaction: new hash + every session revoked (a stolen cookie dies too).
+  // One transaction: new hash + every session revoked (a stolen cookie dies too) + audit row.
   const revoked = await db.$transaction(async (tx) => {
     await tx.account.update({ where: { id: account.id }, data: { password: hash } });
     const { count } = await tx.session.deleteMany({ where: { userId: user.id } });
+    await auditCli(tx, "PASSWORD_RESET", user.id, { email, sessionsRevoked: count });
     return count;
   });
   console.log(`✔ Password reset for ${email}; signed out of ${revoked} session(s).`);

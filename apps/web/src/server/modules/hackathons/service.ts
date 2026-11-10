@@ -1,5 +1,6 @@
 import "server-only";
 
+import { writeAudit } from "../../core/audit";
 import { AppError } from "../../core/errors";
 import type { ConstraintErrors } from "../../core/pg-errors";
 import type { Tx } from "../../core/tx";
@@ -48,10 +49,24 @@ export async function createHackathon(
   adminUserId: string,
   input: CreateHackathon,
 ): Promise<Hackathon> {
-  return tx.hackathon.create({
+  const hackathon = await tx.hackathon.create({
     data: { ...input, createdByUserId: adminUserId },
     select,
   });
+  await writeAudit(tx, [
+    {
+      action: "HACKATHON_CREATED",
+      hackathonId: hackathon.id,
+      actorUserId: adminUserId,
+      metadata: {
+        slug: hackathon.slug,
+        name: hackathon.name,
+        minTeamSize: hackathon.minTeamSize,
+        maxTeamSize: hackathon.maxTeamSize,
+      },
+    },
+  ]);
+  return hackathon;
 }
 
 /** Newest first; id breaks ties (uuidv7 grows with time). */
