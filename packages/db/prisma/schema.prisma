@@ -38,10 +38,52 @@ model User {
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
+  // Profile (step 1.3). Not declared to Better Auth → never settable through sign-up.
+  /// Self-entered, unverified, NOT unique (04 §1.3). Lowercase; hand-written CHECK on format.
+  githubUsername String? @map("github_username")
+  /// Optional; https:// only, ≤ 2048 chars (hand-written CHECK).
+  portfolioUrl   String? @map("portfolio_url")
+  /// Canonical IANA name (validated in the app against tzdata; R16).
+  timezone       String  @default("Asia/Kolkata")
+
   sessions Session[]
   accounts Account[]
+  skills   UserSkill[]
 
   @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// Profile — skills (step 1.3, 02 §3.9). Level 0 = no row.
+// ---------------------------------------------------------------------------
+
+enum Skill {
+  FRONTEND
+  BACKEND
+  MOBILE
+  AI_ML
+  DATA
+  DEVOPS_CLOUD
+  UI_UX_DESIGN
+  PRODUCT
+  BLOCKCHAIN
+  SECURITY
+  HARDWARE_IOT
+  GAME_DEV
+
+  @@map("skill")
+}
+
+model UserSkill {
+  userId String @map("user_id") @db.Uuid
+  skill  Skill
+  /// 1–5 (hand-written CHECK); a skill at level 0 has no row.
+  level  Int    @db.SmallInt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, skill])
+  @@map("user_skills")
 }
 
 model Session {

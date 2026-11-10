@@ -21,7 +21,8 @@
     "db:migrate": "bun run --cwd packages/db migrate",
     "db:deploy": "bun run --cwd packages/db deploy",
     "db:studio": "bun run --cwd packages/db studio",
-    "admin": "bun apps/web/scripts/admin.ts"
+    "admin": "bun apps/web/scripts/admin.ts",
+    "gen:timezones": "bun apps/web/scripts/gen-timezones.ts"
   },
   "devDependencies": {
     "prettier": "^3.6.2",

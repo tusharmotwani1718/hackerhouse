@@ -16,3 +16,6 @@ next-env.d.ts
 
 # Prisma generated client
 packages/db/src/generated/
+
+# Generated timezone list (bun run gen:timezones)
+apps/web/src/server/modules/profile/timezones.data.ts
