@@ -16,7 +16,11 @@
     "infra:up": "docker compose up -d --wait",
     "infra:down": "docker compose down",
     "infra:reset": "docker compose down -v",
-    "infra:logs": "docker compose logs -f"
+    "infra:logs": "docker compose logs -f",
+    "db:generate": "turbo run generate --filter=@hacker-house/db",
+    "db:migrate": "bun run --cwd packages/db migrate",
+    "db:deploy": "bun run --cwd packages/db deploy",
+    "db:studio": "bun run --cwd packages/db studio"
   },
   "devDependencies": {
     "prettier": "^3.6.2",

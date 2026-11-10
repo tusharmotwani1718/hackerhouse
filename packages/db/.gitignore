@@ -1,0 +1,2 @@
+# Prisma client is generated (turbo `generate` task / `bun run db:generate`)
+src/generated/

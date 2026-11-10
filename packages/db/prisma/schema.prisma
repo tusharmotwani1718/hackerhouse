@@ -1,0 +1,11 @@
+// Models are added step by step (first real tables: step 1.1). See specs/result/02_Schema.md.
+// Hand-written SQL rules (CHECKs, partial indexes, DEFERRABLE FKs): specs/result/08_Spike_Results.md §S3.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated"
+}
+
+datasource db {
+  provider = "postgresql"
+}

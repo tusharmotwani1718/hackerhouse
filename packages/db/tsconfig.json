@@ -1,0 +1,7 @@
+{
+  "extends": "@hacker-house/typescript-config/base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "prisma.config.ts"]
+}
