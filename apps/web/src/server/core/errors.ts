@@ -12,6 +12,8 @@ export const ERROR_CODES = {
   NOT_FOUND: 404,
   CONFLICT: 409,
   PAYLOAD_TOO_LARGE: 413,
+  /** Same Idempotency-Key reused for a different request (step 3.2). */
+  IDEMPOTENCY_KEY_REUSED: 422,
   UNSUPPORTED_MEDIA_TYPE: 415,
   RATE_LIMITED: 429,
   INTERNAL: 500,

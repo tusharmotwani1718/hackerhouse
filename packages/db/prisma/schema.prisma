@@ -52,6 +52,7 @@ model User {
   hackathons   Hackathon[]
   participants Participant[]
   inviteCodes  InviteCode[]
+  idempotency  IdempotencyKey[]
 
   @@map("users")
 }
@@ -348,4 +349,34 @@ model Verification {
 
   @@index([identifier])
   @@map("verification")
+}
+
+// ---------------------------------------------------------------------------
+// Idempotency keys (step 3.2, 02 §3.7, 01 §8). Claimed as the FIRST statement of the
+// mutation's own transaction, response stored before COMMIT → a stored response exists
+// exactly when the work committed. Cleanup of expired rows: Phase 11 job.
+// ---------------------------------------------------------------------------
+
+model IdempotencyKey {
+  id             String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  /// Client's `Idempotency-Key` header: 8–128 chars [A-Za-z0-9_-] (hand-written CHECK).
+  key            String
+  /// sha256(method + path + canonical validated body); same key + other hash → 422.
+  requestHash    String   @map("request_hash")
+  /// Status + body are both NULL (claimed, transaction still running) or both set.
+  responseStatus Int?     @map("response_status") @db.SmallInt
+  /// `json`, not `jsonb`: keeps the exact text (key order), so replays are byte-identical.
+  responseBody   Json?    @map("response_body") @db.Json
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  /// created_at + 24 h. An expired row still present is taken over by the next claim.
+  expiresAt      DateTime @map("expires_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Keys are per user. Concurrent duplicates wait on this index (insert-first ordering).
+  @@unique([userId, key])
+  /// Cleanup job (batched DELETE … WHERE expires_at < now(), 06 §8).
+  @@index([expiresAt])
+  @@map("idempotency_keys")
 }

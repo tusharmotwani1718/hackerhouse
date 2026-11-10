@@ -1,8 +1,12 @@
-# Step 2.2 — registration (Flow 5). Run `bun run dev`; VS Code "REST Client" keeps cookies.
-# Needs a hackathon (see hackathons.http) and a user with a complete profile (see profile in /api/me).
+# Steps 2.2 + 3.2 — registration (Flow 5) with idempotency keys. Run `bun run dev`;
+# VS Code "REST Client" keeps cookies. Needs a hackathon (hackathons.http) and a user with a
+# complete profile. Every register call needs an `Idempotency-Key` header (a new UUID per
+# action: {{$guid}}); resending the SAME key replays the original response.
 @base = http://localhost:3000
 @origin = http://localhost:3000
 @hackathon = hackfest-2026
+# Change this before re-running the replay demo (keys are kept 24 h).
+@key = demo-register-key-0001
 
 ### Sign in
 POST {{base}}/api/auth/sign-in/email
@@ -14,14 +18,39 @@ Origin: {{origin}}
 ### My status before registering → registered: false (200, not 404)
 GET {{base}}/api/hackathons/{{hackathon}}/me
 
-### Register → 201 (body must be {}; the JSON content type is required)
+### Register → 201 (body must be {}; JSON content type and Idempotency-Key required)
 POST {{base}}/api/hackathons/{{hackathon}}/register
 Content-Type: application/json
 Origin: {{origin}}
+Idempotency-Key: {{key}}
 
 {}
 
-### Again → 409 ALREADY_REGISTERED
+### Same key again → the SAME 201 body + `Idempotent-Replayed: true` (nothing new written)
+POST {{base}}/api/hackathons/{{hackathon}}/register
+Content-Type: application/json
+Origin: {{origin}}
+Idempotency-Key: {{key}}
+
+{}
+
+### Same key, different request (another hackathon) → 422 IDEMPOTENCY_KEY_REUSED
+POST {{base}}/api/hackathons/winter-build-26/register
+Content-Type: application/json
+Origin: {{origin}}
+Idempotency-Key: {{key}}
+
+{}
+
+### New key → a new action → 409 ALREADY_REGISTERED
+POST {{base}}/api/hackathons/{{hackathon}}/register
+Content-Type: application/json
+Origin: {{origin}}
+Idempotency-Key: {{$guid}}
+
+{}
+
+### No Idempotency-Key → 400
 POST {{base}}/api/hackathons/{{hackathon}}/register
 Content-Type: application/json
 Origin: {{origin}}
@@ -38,8 +67,9 @@ GET {{base}}/api/hackathons/{{hackathon}}
 POST {{base}}/api/hackathons/no-such-hackathon/register
 Content-Type: application/json
 Origin: {{origin}}
+Idempotency-Key: {{$guid}}
 
 {}
 
 ### A user without a GitHub username or skills → 409 PROFILE_INCOMPLETE, details.missing
-# (sign in as that user first)
+# (sign in as that user first). Failures are not stored: the same key re-runs next time.

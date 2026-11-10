@@ -1,10 +1,10 @@
 // POST /api/hackathons/{idOrSlug}/register — Flow 5 (step 2.2). Body: `{}`.
+// Requires an `Idempotency-Key` header (step 3.2): a repeat returns the original 201.
 import { z } from "zod";
 
 import { requireUser } from "@/server/auth/session";
-import { ok } from "@/server/core/http";
+import { runMutation } from "@/server/core/idempotency";
 import { route } from "@/server/core/route";
-import { runTx } from "@/server/core/tx";
 import { emptyBodySchema, parseJson, parseParams } from "@/server/core/validate";
 import { register, registerConstraintErrors } from "@/server/modules/participants/service";
 
@@ -14,10 +14,11 @@ export const POST = route(
   async (req: Request, ctx: RouteContext<"/api/hackathons/[idOrSlug]/register">) => {
     const { user } = await requireUser(req);
     const { idOrSlug } = await parseParams(ctx.params, paramsSchema);
-    await parseJson(req, emptyBodySchema);
-    const status = await runTx(async (tx) => ({ value: await register(tx, user.id, idOrSlug) }), {
-      constraintErrors: registerConstraintErrors,
-    });
-    return ok(status, { status: 201 });
+    const input = await parseJson(req, emptyBodySchema);
+    return runMutation(
+      req,
+      { userId: user.id, input, status: 201, constraintErrors: registerConstraintErrors },
+      async (tx) => ({ value: await register(tx, user.id, idOrSlug) }),
+    );
   },
 );

@@ -43,7 +43,7 @@ export async function register(
   userId: string,
   idOrSlug: string,
 ): Promise<MyHackathonStatus> {
-  // TODO(3.2): idempotency insert goes first (03 §0.2 step 2).
+  // The idempotency claim already ran as this transaction's first statement (runMutation).
   const hackathon = await resolveHackathon(tx, idOrSlug);
 
   const user = await tx.user.findUnique({
@@ -61,7 +61,7 @@ export async function register(
   }
 
   // ON CONFLICT DO NOTHING, not "catch the unique violation": an error aborts the whole
-  // transaction, and from 3.1/3.2 on the audit row and stored response come after this insert.
+  // transaction, and the audit row and the stored idempotent response come after this insert.
   const rows = await tx.$queryRaw<{ id: string; created_at: Date }[]>`
     INSERT INTO participants (user_id, hackathon_id)
     VALUES (${userId}::uuid, ${hackathon.id}::uuid)
@@ -81,7 +81,7 @@ export async function register(
     },
   ]);
 
-  // TODO(3.2): store the response. No SSE event (Flow 5).
+  // runMutation stores the response before COMMIT. No SSE event (Flow 5).
   return { registered: true, participantId: row.id, registeredAt: row.created_at, team: null };
 }
 
