@@ -16,6 +16,10 @@ export const ERROR_CODES = {
   RATE_LIMITED: 429,
   INTERNAL: 500,
   RETRY_LATER: 503,
+
+  // Hackathons (step 2.1)
+  HACKATHON_NOT_FOUND: 404,
+  SLUG_TAKEN: 409,
 } as const satisfies Record<string, number>;
 
 export type ErrorCode = keyof typeof ERROR_CODES;

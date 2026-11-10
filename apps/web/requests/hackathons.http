@@ -1,0 +1,55 @@
+# Step 2.1 — hackathons. Run `bun run dev`; VS Code "REST Client" keeps cookies between requests.
+# Sign in as an admin first (create one with `bun run admin create`), then as a normal user.
+@base = http://localhost:3000
+@origin = http://localhost:3000
+
+### Sign in as admin
+POST {{base}}/api/auth/sign-in/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{ "email": "asha@example.com", "password": "REPLACE_ME" }
+
+### Create (slug derived from the name → "hackfest-2026") → 201
+POST {{base}}/api/hackathons
+Content-Type: application/json
+Origin: {{origin}}
+
+{ "name": "HackFest 2026!", "description": "Remote, 48 hours.", "minTeamSize": 2, "maxTeamSize": 4 }
+
+### Same slug again → 409 SLUG_TAKEN
+POST {{base}}/api/hackathons
+Content-Type: application/json
+Origin: {{origin}}
+
+{ "name": "HackFest 2026", "minTeamSize": 2, "maxTeamSize": 4 }
+
+### Explicit slug → 201
+POST {{base}}/api/hackathons
+Content-Type: application/json
+Origin: {{origin}}
+
+{ "name": "Winter Build", "slug": "winter-build-26", "minTeamSize": 1, "maxTeamSize": 5 }
+
+### Invalid: min > max, max 11, unknown field → 400 with details per field
+POST {{base}}/api/hackathons
+Content-Type: application/json
+Origin: {{origin}}
+
+{ "name": "Bad", "minTeamSize": 5, "maxTeamSize": 11, "deadline": "tomorrow" }
+
+### List (newest first)
+GET {{base}}/api/hackathons
+
+### Detail by slug
+GET {{base}}/api/hackathons/hackfest-2026
+
+### Detail by unknown slug → 404 HACKATHON_NOT_FOUND
+GET {{base}}/api/hackathons/no-such-hackathon
+
+### Sign in as a normal user → POST gives 403, GETs still work
+POST {{base}}/api/auth/sign-in/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{ "email": "pat@example.com", "password": "REPLACE_ME" }

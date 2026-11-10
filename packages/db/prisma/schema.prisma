@@ -46,11 +46,39 @@ model User {
   /// Canonical IANA name (validated in the app against tzdata; R16).
   timezone       String  @default("Asia/Kolkata")
 
-  sessions Session[]
-  accounts Account[]
-  skills   UserSkill[]
+  sessions   Session[]
+  accounts   Account[]
+  skills     UserSkill[]
+  hackathons Hackathon[]
 
   @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// Hackathons (step 2.1, 02 §3.2). Created by admins only (R14); no edit/delete in v1.
+// ---------------------------------------------------------------------------
+
+model Hackathon {
+  id              String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  /// 3–100 chars, trimmed (hand-written CHECK).
+  name            String
+  /// URL id: lowercase letters/digits, single hyphens, 3–60 chars (hand-written CHECK).
+  slug            String   @unique
+  /// 0–5000 chars (hand-written CHECK).
+  description     String   @default("")
+  /// 1 ≤ min ≤ max ≤ 10 (hand-written CHECK). IMMUTABLE (R10): teams copy max_team_size into
+  /// their own row; a hand-written trigger rejects any UPDATE of either size.
+  minTeamSize     Int      @map("min_team_size") @db.SmallInt
+  maxTeamSize     Int      @map("max_team_size") @db.SmallInt
+  /// Must be an ADMIN when created (checked in the app). RESTRICT: the creator can't be deleted.
+  createdByUserId String   @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  createdBy User @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([createdByUserId])
+  @@map("hackathons")
 }
 
 // ---------------------------------------------------------------------------
