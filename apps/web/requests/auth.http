@@ -1,0 +1,72 @@
+# Step 1.1 — authentication. Run `bun run dev`, then use VS Code "REST Client"
+# (humao.rest-client); it keeps cookies between requests, like a browser.
+# Better Auth's own routes (/api/auth/*) answer in Better Auth's format, not our envelope.
+@base = http://localhost:3000
+@origin = http://localhost:3000
+
+### Sign up (signs in immediately → Set-Cookie: better-auth.session_token)
+POST {{base}}/api/auth/sign-up/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{ "name": "  Asha Rao  ", "email": "Asha@Example.com", "password": "correct-horse-battery" }
+
+### Trying to self-assign ADMIN is ignored → role stays USER
+POST {{base}}/api/auth/sign-up/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{ "name": "Mallory", "email": "mallory@example.com", "password": "correct-horse-battery", "role": "ADMIN" }
+
+### Same email, different case → rejected
+POST {{base}}/api/auth/sign-up/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{ "name": "Asha Again", "email": "ASHA@example.com", "password": "correct-horse-battery" }
+
+### Wrong password → 401 (generic message)
+POST {{base}}/api/auth/sign-in/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{ "email": "asha@example.com", "password": "wrong-password" }
+
+### Sign in
+POST {{base}}/api/auth/sign-in/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{ "email": "asha@example.com", "password": "correct-horse-battery" }
+
+### Current session (null when signed out)
+GET {{base}}/api/auth/get-session
+
+### Our endpoint guarded by requireUser → 200 signed in, 401 (our envelope) signed out
+GET {{base}}/api/dev/probe/whoami
+
+### requireAdmin → 403 for USER. Promote for testing (until the step 1.2 CLI):
+###   docker compose exec postgres psql -U hacker -d hacker_house -c "UPDATE users SET role='ADMIN' WHERE email='asha@example.com'"
+GET {{base}}/api/dev/probe/admin-only
+
+### Disabled endpoint → 404
+POST {{base}}/api/auth/update-user
+Content-Type: application/json
+Origin: {{origin}}
+
+{ "name": "New Name" }
+
+### Foreign Origin → rejected by Better Auth's origin check
+POST {{base}}/api/auth/sign-in/email
+Content-Type: application/json
+Origin: https://evil.example
+
+{ "email": "asha@example.com", "password": "correct-horse-battery" }
+
+### Sign out (deletes the session row; the old cookie stops working).
+### Better Auth requires a JSON content type on every POST, even without a body.
+POST {{base}}/api/auth/sign-out
+Content-Type: application/json
+Origin: {{origin}}
+
+{}

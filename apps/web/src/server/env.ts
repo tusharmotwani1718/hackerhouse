@@ -33,6 +33,9 @@ const intWithDefault = (defaultValue: number, min: number, max: number) =>
       .default(defaultValue),
   );
 
+/** `.env.example` ships a dev secret starting with this; production refuses it. */
+const DEV_SECRET_PREFIX = "dev-only-";
+
 const schema = z
   .object({
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
@@ -48,13 +51,25 @@ const schema = z
     DATABASE_TX_MAX_WAIT_MS: intWithDefault(5_000, 100, 60_000),
     DATABASE_TX_TIMEOUT_MS: intWithDefault(10_000, 100, 120_000),
     DATABASE_LOCK_TIMEOUT_MS: intWithDefault(5_000, 100, 60_000),
+
+    // Better Auth (step 1.1). The secret signs session cookies (HMAC-SHA256).
+    BETTER_AUTH_SECRET: z
+      .string()
+      .min(1, { error: "is required", abort: true })
+      .min(32, { error: "must be at least 32 characters (generate: openssl rand -base64 32)" }),
+    BETTER_AUTH_URL: urlWithProtocol(["http:", "https:"]),
   })
   // lock_timeout must fire first: it is the only one that frees a connection blocked inside
   // Postgres, and it yields a clean 55P03 instead of an "expired transaction" error.
   .refine((env) => env.DATABASE_LOCK_TIMEOUT_MS < env.DATABASE_TX_TIMEOUT_MS, {
     path: ["DATABASE_LOCK_TIMEOUT_MS"],
     error: "must be less than DATABASE_TX_TIMEOUT_MS",
-  });
+  })
+  // Never ship the placeholder secret from .env.example.
+  .refine(
+    (env) => env.NODE_ENV !== "production" || !env.BETTER_AUTH_SECRET.startsWith(DEV_SECRET_PREFIX),
+    { path: ["BETTER_AUTH_SECRET"], error: "is the .env.example placeholder; set a real secret" },
+  );
 
 export type Env = Readonly<z.infer<typeof schema>>;
 

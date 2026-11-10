@@ -3,6 +3,7 @@
 // Requests: apps/web/requests/probe.http. Remove once Phase 10 tests cover the same ground.
 import { z } from "zod";
 
+import { requireAdmin, requireUser } from "@/server/auth/session";
 import { getRequestContext } from "@/server/core/context";
 import { AppError } from "@/server/core/errors";
 import { ok } from "@/server/core/http";
@@ -27,6 +28,8 @@ const CASES = [
   "events-rollback",
   "snapshot",
   "snapshot-write",
+  "whoami", // step 1.1: requireUser
+  "admin-only", // step 1.1: requireAdmin
 ] as const;
 
 const paramsSchema = z.object({ case: z.enum(CASES) });
@@ -182,6 +185,17 @@ async function runCase(name: (typeof CASES)[number], req: Request): Promise<Resp
           return "unreachable";
         }),
       );
+
+    case "whoami": {
+      const { user, session } = await requireUser(req);
+      logger.info("probe: whoami (this line carries userId)");
+      return ok({ user, sessionExpiresAt: session.expiresAt });
+    }
+
+    case "admin-only": {
+      const { user } = await requireAdmin(req);
+      return ok({ message: "Welcome, admin.", user });
+    }
   }
 }
 

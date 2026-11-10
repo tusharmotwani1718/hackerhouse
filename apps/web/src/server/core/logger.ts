@@ -56,8 +56,12 @@ function write(level: LogLevel, msg: string, fields: LogFields = {}): void {
   const env = getEnv();
   if (LEVEL_ORDER[level] < LEVEL_ORDER[env.LOG_LEVEL]) return;
 
-  const requestId = getRequestContext()?.requestId;
-  const all = normalize({ ...(requestId && { requestId }), ...fields });
+  const context = getRequestContext();
+  const all = normalize({
+    ...(context?.requestId && { requestId: context.requestId }),
+    ...(context?.userId && { userId: context.userId }),
+    ...fields,
+  });
   const line =
     env.NODE_ENV === "production"
       ? JSON.stringify({ time: new Date().toISOString(), level, msg, ...all })
