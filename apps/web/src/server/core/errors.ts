@@ -26,6 +26,12 @@ export const ERROR_CODES = {
   // Participants (step 2.2)
   PROFILE_INCOMPLETE: 409,
   ALREADY_REGISTERED: 409,
+  /** One status everywhere (3.3 D3): the hackathon exists, you just can't act in it yet. */
+  NOT_REGISTERED: 403,
+
+  // Teams (step 3.3)
+  ALREADY_IN_TEAM: 409,
+  TEAM_NAME_TAKEN: 409,
 } as const satisfies Record<string, number>;
 
 export type ErrorCode = keyof typeof ERROR_CODES;

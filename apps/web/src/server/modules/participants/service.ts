@@ -12,11 +12,11 @@ export type MyHackathonStatus = {
   registered: boolean;
   participantId: string | null;
   registeredAt: Date | null;
-  /** Always null until teams exist (step 3.3): `{ id, name, isLeader }`. */
-  team: null;
+  /** My team in this hackathon, or null (step 3.3). */
+  team: { id: string; name: string; isLeader: boolean } | null;
 };
 
-const NOT_REGISTERED: MyHackathonStatus = {
+const NOT_REGISTERED_STATUS: MyHackathonStatus = {
   registered: false,
   participantId: null,
   registeredAt: null,
@@ -94,13 +94,20 @@ export async function getMyStatus(
   const hackathon = await resolveHackathon(tx, idOrSlug);
   const participant = await tx.participant.findUnique({
     where: { userId_hackathonId: { userId, hackathonId: hackathon.id } },
-    select: { id: true, createdAt: true },
+    select: {
+      id: true,
+      createdAt: true,
+      team: { select: { id: true, name: true, leaderParticipantId: true } },
+    },
   });
-  if (!participant) return NOT_REGISTERED;
+  if (!participant) return NOT_REGISTERED_STATUS;
+  const { team } = participant;
   return {
     registered: true,
     participantId: participant.id,
     registeredAt: participant.createdAt,
-    team: null,
+    team: team
+      ? { id: team.id, name: team.name, isLeader: team.leaderParticipantId === participant.id }
+      : null,
   };
 }

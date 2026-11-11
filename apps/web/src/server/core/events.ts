@@ -21,6 +21,7 @@ const logPublisher: EventPublisher = {
   async publish(events) {
     for (const event of events) {
       logger.info("event published", { channel: event.channel, type: event.type });
+      logger.debug("event payload", { type: event.type, payload: event.payload }); // LOG_LEVEL=debug
     }
   },
 };
