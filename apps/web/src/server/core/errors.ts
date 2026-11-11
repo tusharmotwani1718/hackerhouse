@@ -32,6 +32,14 @@ export const ERROR_CODES = {
   // Teams (step 3.3)
   ALREADY_IN_TEAM: 409,
   TEAM_NAME_TAKEN: 409,
+
+  // Joining (step 3.4)
+  TEAM_NOT_FOUND: 404,
+  INVITE_REQUIRED: 403,
+  APPROVAL_REQUIRED: 409,
+  TEAM_FULL: 409,
+  /** One error for wrong, malformed, revoked and expired codes (01 §5: no oracle). */
+  INVALID_CODE: 404,
 } as const satisfies Record<string, number>;
 
 export type ErrorCode = keyof typeof ERROR_CODES;

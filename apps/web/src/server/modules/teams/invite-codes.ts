@@ -11,6 +11,18 @@ export const INVITE_CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 /** 10 symbols × 5 bits = 50 bits of entropy (01 §5). Same rule as invite_codes_code_check. */
 export const INVITE_CODE_LENGTH = 10;
 
+const INVITE_CODE_PATTERN = /^[0-9A-HJKMNP-TV-Z]{10}$/; // same as invite_codes_code_check
+
+/**
+ * A typed-in code → its stored form, or null if it can't be one. Crockford's decoding rules:
+ * case-insensitive, hyphens and spaces ignored, look-alikes mapped (I, L → 1; O → 0).
+ * So "9wbex-hjvv7" and "9WBEX HJVV7" both find 9WBEXHJVV7.
+ */
+export function normalizeInviteCode(input: string): string | null {
+  const code = input.toUpperCase().replace(/[\s-]/g, "").replace(/[IL]/g, "1").replace(/O/g, "0");
+  return INVITE_CODE_PATTERN.test(code) ? code : null;
+}
+
 /** Returns a uniform integer in [0, max). Injectable so tests can force a collision. */
 export type RandomIndex = (max: number) => number;
 

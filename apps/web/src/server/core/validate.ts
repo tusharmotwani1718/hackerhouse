@@ -7,6 +7,16 @@ import { AppError } from "./errors";
 /** Largest accepted JSON body. Our biggest real payload (a profile) is < 2 KB. */
 export const MAX_BODY_BYTES = 64 * 1024;
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * True if `value` is shaped like a uuid. Check before using a path value as a uuid: casting a
+ * malformed one in SQL raises 22P02 (a 500), when the right answer is a plain 404.
+ */
+export function isUuid(value: string): boolean {
+  return UUID.test(value);
+}
+
 /**
  * Body of a POST that carries no data (e.g. register): must be exactly `{}`. Still parsed with
  * parseJson, so the JSON content-type rule (our CSRF defence) holds for every mutation.

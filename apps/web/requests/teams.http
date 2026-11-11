@@ -63,3 +63,25 @@ Idempotency-Key: {{$guid}}
 
 ### Another user, same name in other letter case → 409 TEAM_NAME_TAKEN
 # (sign in as that user first; they must be registered and not in a team)
+
+# ---------------------------------------------------------------- Step 3.4 — join (Flow 1)
+# Sign in as someone registered in the hackathon and not in a team there.
+@teamId = REPLACE_WITH_AN_OPEN_PUBLIC_TEAM_ID
+
+### Join from the board (OPEN + PUBLIC teams only) → 200 { team, joinedAt }
+POST {{base}}/api/teams/{{teamId}}/join
+Content-Type: application/json
+Origin: {{origin}}
+Idempotency-Key: {{$guid}}
+
+{}
+
+### Join with an invite code (any access). Case, hyphens, spaces and I/L/O look-alikes are
+### forgiven. Any bad code (wrong, malformed, revoked, expired) → the same 404 INVALID_CODE.
+### An APPROVAL team's code → 409 APPROVAL_REQUIRED (until step 4.2 adds join requests).
+POST {{base}}/api/invites/redeem
+Content-Type: application/json
+Origin: {{origin}}
+Idempotency-Key: {{$guid}}
+
+{ "code": "abcde-12345" }

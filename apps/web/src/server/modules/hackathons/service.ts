@@ -4,6 +4,7 @@ import { writeAudit } from "../../core/audit";
 import { AppError } from "../../core/errors";
 import type { ConstraintErrors } from "../../core/pg-errors";
 import type { Tx } from "../../core/tx";
+import { isUuid } from "../../core/validate";
 import type { CreateHackathon } from "./schemas";
 
 export type Hackathon = {
@@ -78,8 +79,6 @@ export async function listHackathons(tx: Tx): Promise<Hackathon[]> {
   });
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /**
  * Every `/api/hackathons/{idOrSlug}/...` route starts here: by uuid if the value looks like one,
  * else by slug (case-insensitive); or 404 HACKATHON_NOT_FOUND.
@@ -87,7 +86,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export async function resolveHackathon(tx: Tx, idOrSlug: string): Promise<Hackathon> {
   const value = idOrSlug.trim();
   const hackathon = await tx.hackathon.findUnique({
-    where: UUID.test(value) ? { id: value } : { slug: value.toLowerCase() },
+    where: isUuid(value) ? { id: value } : { slug: value.toLowerCase() },
     select,
   });
   if (!hackathon) throw new AppError("HACKATHON_NOT_FOUND", "Hackathon not found.");
