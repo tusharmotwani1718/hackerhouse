@@ -96,3 +96,22 @@ Origin: {{origin}}
 Idempotency-Key: {{$guid}}
 
 {}
+
+# ---------------------------------------------------------------- Step 3.6 — reads (05 §3–4)
+# Lists: newest first; params cursor, limit (1-50, default 20), policy, access, q (name search).
+# Response { data: { teams: [cards], totalCount }, nextCursor }. Pass nextCursor back unchanged.
+
+### Board: listed teams only (looking AND not full)
+GET {{base}}/api/hackathons/{{hackathon}}/board?limit=10
+
+### All Teams, filtered + searched (q is matched literally: % and _ are not wildcards)
+GET {{base}}/api/hackathons/{{hackathon}}/teams?policy=OPEN&access=PUBLIC&q=rocket
+
+### Next page: copy nextCursor from the previous response
+GET {{base}}/api/hackathons/{{hackathon}}/teams?limit=10&cursor=PASTE_NEXT_CURSOR
+
+### Team page: card + members (join order) + viewer { isMember, isLeader, myRequest }
+GET {{base}}/api/teams/{{teamId}}
+
+### Hackathon detail: stats { participants, teams, lookingTeams } (lookingTeams = board total)
+GET {{base}}/api/hackathons/{{hackathon}}

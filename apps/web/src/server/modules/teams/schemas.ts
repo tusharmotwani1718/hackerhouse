@@ -56,3 +56,27 @@ export const createTeamSchema = z.strictObject({
 });
 
 export type CreateTeam = z.output<typeof createTeamSchema>;
+
+export const LIST_LIMIT_DEFAULT = 20;
+export const LIST_LIMIT_MAX = 50;
+
+/** Query string of the board and All Teams (05 §3). Unknown parameters are ignored. */
+export const listTeamsQuerySchema = z.object({
+  cursor: z.string().max(200, { error: "is not a valid cursor" }).optional(),
+  limit: z.coerce
+    .number({ error: `must be a whole number 1-${LIST_LIMIT_MAX}` })
+    .int({ error: `must be a whole number 1-${LIST_LIMIT_MAX}` })
+    .min(1, { error: `must be 1-${LIST_LIMIT_MAX}` })
+    .max(LIST_LIMIT_MAX, { error: `must be 1-${LIST_LIMIT_MAX}` })
+    .default(LIST_LIMIT_DEFAULT),
+  policy: z.enum(JOIN_POLICIES, { error: `must be one of ${JOIN_POLICIES.join(", ")}` }).optional(),
+  access: z.enum(ACCESS_VALUES, { error: `must be one of ${ACCESS_VALUES.join(", ")}` }).optional(),
+  q: z
+    .string()
+    .trim()
+    .min(1, { error: `must be 1-${TEAM_NAME_MAX} characters` })
+    .max(TEAM_NAME_MAX, { error: `must be 1-${TEAM_NAME_MAX} characters` })
+    .optional(),
+});
+
+export type ListTeamsQuery = z.output<typeof listTeamsQuerySchema>;

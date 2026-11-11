@@ -94,13 +94,29 @@ export async function resolveHackathon(tx: Tx, idOrSlug: string): Promise<Hackat
 }
 
 export type HackathonDetail = Hackathon & {
-  /** `teams` and `lookingTeams` join in step 3.6 (05 §4.7). */
-  stats: { participants: number };
+  stats: {
+    participants: number;
+    teams: number;
+    /** Teams listed on the board (looking AND not full): equals the board's totalCount. */
+    lookingTeams: number;
+  };
 };
 
-/** Two queries → call inside runReadTx so they see one snapshot (RD2). */
+/** Several queries → call inside runReadTx so they see one snapshot (RD2). */
 export async function getHackathon(tx: Tx, idOrSlug: string): Promise<HackathonDetail> {
   const hackathon = await resolveHackathon(tx, idOrSlug);
   const participants = await tx.participant.count({ where: { hackathonId: hackathon.id } });
-  return { ...hackathon, stats: { participants } };
+  // One pass over the hackathon's teams; same "listed" condition as the board (05 §4.7).
+  const [teamStats] = await tx.$queryRaw<{ teams: number; looking: number }[]>`
+    SELECT count(*)::int AS teams,
+           count(*) FILTER (WHERE is_looking AND member_count < max_size)::int AS looking
+    FROM teams WHERE hackathon_id = ${hackathon.id}::uuid`;
+  return {
+    ...hackathon,
+    stats: {
+      participants,
+      teams: teamStats?.teams ?? 0,
+      lookingTeams: teamStats?.looking ?? 0,
+    },
+  };
 }

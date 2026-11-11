@@ -1,5 +1,5 @@
 // GET /api/hackathons/{idOrSlug} — one hackathon by uuid or slug (any signed-in user).
-// Step 2.1; `stats.participants` since 2.2 (`teams`, `lookingTeams` join in 3.6, 05 §4.7).
+// Step 2.1; `stats { participants, teams, lookingTeams }` since 2.2 / 3.6 (05 §4.7).
 import { z } from "zod";
 
 import { requireUser } from "@/server/auth/session";

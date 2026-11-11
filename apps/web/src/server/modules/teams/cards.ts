@@ -70,33 +70,51 @@ export async function buildTeamCards(tx: Tx, teams: readonly TeamCardRow[]): Pro
       user: { select: { name: true, skills: { select: { skill: true, level: true } } } },
     },
   });
+  return teams.map((team) =>
+    toTeamCard(
+      team,
+      members
+        .filter((member) => member.teamId === team.id)
+        .map((member) => ({ participantId: member.id, ...member.user })),
+    ),
+  );
+}
 
-  return teams.map((team) => {
-    const teamMembers = members.filter((member) => member.teamId === team.id);
-    const skillProfile: Partial<Record<Skill, number>> = {};
-    for (const member of teamMembers) {
-      for (const { skill, level } of member.user.skills) {
-        skillProfile[skill] = Math.max(skillProfile[skill] ?? 0, level);
-      }
+/** What a card needs to know about each member. */
+export type CardMember = {
+  participantId: string;
+  name: string;
+  skills: readonly { skill: Skill; level: number }[];
+};
+
+/**
+ * Pure: a team row + its members → its card. Used by buildTeamCards, and by the team page,
+ * which loads richer member rows anyway and shouldn't query them twice.
+ */
+export function toTeamCard(team: TeamCardRow, members: readonly CardMember[]): TeamCard {
+  const skillProfile: Partial<Record<Skill, number>> = {};
+  for (const member of members) {
+    for (const { skill, level } of member.skills) {
+      skillProfile[skill] = Math.max(skillProfile[skill] ?? 0, level);
     }
-    const leader = teamMembers.find((member) => member.id === team.leaderParticipantId);
-    return {
-      id: team.id,
-      name: team.name,
-      description: team.description,
-      joinPolicy: team.joinPolicy,
-      access: team.access,
-      memberCount: team.memberCount,
-      maxSize: team.maxSize,
-      seatsLeft: team.maxSize - team.memberCount,
-      listed: team.isLooking && team.memberCount < team.maxSize,
-      // The deferred leader FK guarantees the leader is a member, so this is always found.
-      leader: { name: leader?.user.name ?? "" },
-      skillProfile: Object.fromEntries(
-        Object.entries(skillProfile).sort(([a], [b]) => a.localeCompare(b)),
-      ),
-      version: team.version,
-      createdAt: team.createdAt,
-    };
-  });
+  }
+  const leader = members.find((member) => member.participantId === team.leaderParticipantId);
+  return {
+    id: team.id,
+    name: team.name,
+    description: team.description,
+    joinPolicy: team.joinPolicy,
+    access: team.access,
+    memberCount: team.memberCount,
+    maxSize: team.maxSize,
+    seatsLeft: team.maxSize - team.memberCount,
+    listed: team.isLooking && team.memberCount < team.maxSize,
+    // The deferred leader FK guarantees the leader is a member, so this is always found.
+    leader: { name: leader?.name ?? "" },
+    skillProfile: Object.fromEntries(
+      Object.entries(skillProfile).sort(([a], [b]) => a.localeCompare(b)),
+    ),
+    version: team.version,
+    createdAt: team.createdAt,
+  };
 }
