@@ -3,7 +3,7 @@ import "server-only";
 import { Prisma, type JoinPolicy, type TeamAccess } from "@hacker-house/db";
 
 import { writeAudit } from "../../core/audit";
-import { AppError } from "../../core/errors";
+import { AppError, internalError } from "../../core/errors";
 import type { DomainEvent } from "../../core/events";
 import type { ConstraintErrors } from "../../core/pg-errors";
 import type { Tx, TxResult } from "../../core/tx";
@@ -173,7 +173,15 @@ export async function createTeam(
 
 // ---------------------------------------------------------------------------------- team row
 
-type LockedTeam = { id: string; hackathonId: string; memberCount: number; maxSize: number };
+type LockedTeam = {
+  id: string;
+  hackathonId: string;
+  name: string;
+  memberCount: number;
+  maxSize: number;
+  leaderParticipantId: string;
+  version: number;
+};
 
 /**
  * Lock a team row (I1: after participant rows, before request rows), or 404 if it's gone
@@ -191,9 +199,18 @@ export async function lockTeam(
 ): Promise<LockedTeam> {
   // `mode` is one of two literals from our code, never user input → safe as raw SQL.
   const rows = await tx.$queryRaw<
-    { id: string; hackathon_id: string; member_count: number; max_size: number }[]
+    {
+      id: string;
+      hackathon_id: string;
+      name: string;
+      member_count: number;
+      max_size: number;
+      leader_participant_id: string;
+      version: number;
+    }[]
   >(Prisma.sql`
-    SELECT id, hackathon_id, member_count, max_size FROM teams
+    SELECT id, hackathon_id, name, member_count, max_size, leader_participant_id, version
+    FROM teams
     WHERE id = ${teamId}::uuid
     FOR ${Prisma.raw(mode)}`);
   const row = rows[0];
@@ -201,8 +218,11 @@ export async function lockTeam(
   return {
     id: row.id,
     hackathonId: row.hackathon_id,
+    name: row.name,
     memberCount: row.member_count,
     maxSize: row.max_size,
+    leaderParticipantId: row.leader_participant_id,
+    version: row.version,
   };
 }
 
@@ -384,6 +404,161 @@ export async function joinTeam(
   const [card] = await buildTeamCards(tx, [updated]);
   return {
     value: { team: toTeamView(updated), joinedAt: joined[0]!.team_joined_at },
+    events: [{ channel: `hackathon:${team.hackathonId}`, type: "team.updated", payload: card }],
+  };
+}
+
+// ---------------------------------------------------------------------------------- leave (Flow 3)
+
+export type LeftTeam = {
+  teamId: string;
+  /** Case A: I was the last member, so the team was deleted (R7). */
+  teamDeleted: boolean;
+  /** Case C: I was the leader; leadership passed to the longest-joined member (R6). */
+  newLeader: { participantId: string; userId: string; name: string } | null;
+};
+
+/**
+ * Flow 3: leave my team. Runs inside runMutation. Locks (I1): my participant row, then the team.
+ */
+export async function leaveTeam(
+  tx: Tx,
+  userId: string,
+  teamId: string,
+): Promise<TxResult<LeftTeam>> {
+  // Pre-lock (I4): only the team's hackathon, which never changes.
+  const team = isUuid(teamId)
+    ? await tx.team.findUnique({ where: { id: teamId }, select: { id: true, hackathonId: true } })
+    : null;
+  if (!team) throw new AppError("TEAM_NOT_FOUND", "Team not found.");
+
+  const participant = await lockOwnParticipant(tx, userId, team.hackathonId);
+  if (participant.teamId !== team.id) {
+    throw new AppError("NOT_A_MEMBER", "You are not a member of this team.");
+  }
+  return leaveTeamAsLockedMember(tx, { userId, participantId: participant.id, teamId: team.id });
+}
+
+/**
+ * Flow 3 from step 4. The caller already holds the leaving participant's lock and has checked
+ * they belong to `teamId`. Flow 8 (withdraw, 5.2) calls this inside its own transaction.
+ */
+export async function leaveTeamAsLockedMember(
+  tx: Tx,
+  input: { userId: string; participantId: string; teamId: string },
+): Promise<TxResult<LeftTeam>> {
+  // FOR UPDATE, not NO KEY UPDATE: we may delete the team, and we only know that after reading
+  // member_count under the lock. Upgrading a weaker lock later would be fragile.
+  const team = await lockTeam(tx, input.teamId, "UPDATE");
+  const iAmLeader = team.leaderParticipantId === input.participantId;
+
+  // Common first step for all cases. Required before a delete (participants_team_fkey is
+  // RESTRICT and checked immediately); harmless before a leader change (the leader FK is
+  // deferred, so the brief "leader isn't a member" state is only checked at COMMIT).
+  await tx.$executeRaw`
+    UPDATE participants SET team_id = NULL, team_joined_at = NULL
+    WHERE id = ${input.participantId}::uuid`;
+
+  const audit = {
+    hackathonId: team.hackathonId,
+    teamId: team.id,
+    actorUserId: input.userId,
+  };
+
+  if (team.memberCount === 1) {
+    // Case A — last member, so necessarily the leader (the deferred leader FK guarantees the
+    // leader is a member). Anything else means member_count drifted: stop, don't delete.
+    if (!iAmLeader) {
+      throw internalError(new Error(`team ${team.id}: member_count 1 but leaver isn't leader`));
+    }
+    // TODO(4.1): lock T's pending requests in id order (§0.4) BEFORE the delete cascades to
+    // them, then notify the requesters (request.cancelled) and audit each one.
+    // Invite codes go with the team (ON DELETE CASCADE). If a member were still left behind,
+    // RESTRICT on participants_team_fkey would refuse this delete.
+    await tx.$executeRaw`DELETE FROM teams WHERE id = ${team.id}::uuid`;
+
+    await writeAudit(tx, [
+      {
+        ...audit,
+        action: "MEMBER_LEFT",
+        metadata: { participantId: input.participantId, memberCount: 0 },
+      },
+      {
+        ...audit,
+        action: "TEAM_DELETED",
+        metadata: { name: team.name, reason: "LAST_MEMBER_LEFT" },
+      },
+    ]);
+    return {
+      value: { teamId: team.id, teamDeleted: true, newLeader: null },
+      // version = last + 1, so a deletion always outranks any late team.updated (05 §5).
+      events: [
+        {
+          channel: `hackathon:${team.hackathonId}`,
+          type: "team.deleted",
+          payload: { id: team.id, version: team.version + 1 },
+        },
+      ],
+    };
+  }
+
+  let updated: TeamRow;
+  let newLeader: LeftTeam["newLeader"] = null;
+
+  if (!iAmLeader) {
+    // Case B — a regular member: one seat frees up.
+    updated = await updateTeamRow(tx, team.id, { memberCountDelta: -1 });
+    await writeAudit(tx, [
+      {
+        ...audit,
+        action: "MEMBER_LEFT",
+        metadata: { participantId: input.participantId, memberCount: updated.memberCount },
+      },
+    ]);
+  } else {
+    // Case C — the leader leaves, others remain: the longest-joined member leads (R6); id
+    // breaks ties, so the choice is deterministic. No lock on the successor: by I2 nobody can
+    // join or leave this team without the team lock, which we hold, so this member set is
+    // frozen until we commit. (Locking a participant after a team would also break I1.)
+    // I'm already cleared above, so `team_id = T` excludes me.
+    const successors = await tx.$queryRaw<{ id: string; user_id: string; name: string }[]>`
+      SELECT p.id, p.user_id, u.name
+      FROM participants p JOIN users u ON u.id = p.user_id
+      WHERE p.team_id = ${team.id}::uuid
+      ORDER BY p.team_joined_at ASC, p.id ASC
+      LIMIT 1`;
+    const successor = successors[0];
+    if (!successor) {
+      throw internalError(new Error(`team ${team.id}: member_count > 1 but no other member`));
+    }
+    updated = await updateTeamRow(tx, team.id, {
+      memberCountDelta: -1,
+      leaderParticipantId: successor.id,
+    });
+    newLeader = { participantId: successor.id, userId: successor.user_id, name: successor.name };
+    await writeAudit(tx, [
+      {
+        ...audit,
+        action: "MEMBER_LEFT",
+        metadata: { participantId: input.participantId, memberCount: updated.memberCount },
+      },
+      {
+        ...audit,
+        action: "LEADER_CHANGED",
+        targetUserId: successor.user_id,
+        metadata: {
+          fromParticipantId: input.participantId,
+          toParticipantId: successor.id,
+          reason: "LEADER_LEFT",
+        },
+      },
+    ]);
+  }
+
+  // Built after ALL writes, so the card shows the final members and leader.
+  const [card] = await buildTeamCards(tx, [updated]);
+  return {
+    value: { teamId: team.id, teamDeleted: false, newLeader },
     events: [{ channel: `hackathon:${team.hackathonId}`, type: "team.updated", payload: card }],
   };
 }

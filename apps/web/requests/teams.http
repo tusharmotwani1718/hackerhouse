@@ -85,3 +85,14 @@ Origin: {{origin}}
 Idempotency-Key: {{$guid}}
 
 { "code": "abcde-12345" }
+
+# ---------------------------------------------------------------- Step 3.5 — leave (Flow 3)
+# 200 { teamId, teamDeleted, newLeader }. Last member → team deleted (R7). Leader leaving →
+# the longest-joined member leads (R6), returned in `newLeader`. Not in this team → 409
+# NOT_A_MEMBER; not registered in its hackathon → 403 NOT_REGISTERED.
+POST {{base}}/api/teams/{{teamId}}/leave
+Content-Type: application/json
+Origin: {{origin}}
+Idempotency-Key: {{$guid}}
+
+{}

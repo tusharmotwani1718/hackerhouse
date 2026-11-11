@@ -40,6 +40,9 @@ export const ERROR_CODES = {
   TEAM_FULL: 409,
   /** One error for wrong, malformed, revoked and expired codes (01 §5: no oracle). */
   INVALID_CODE: 404,
+
+  // Leaving (step 3.5)
+  NOT_A_MEMBER: 409,
 } as const satisfies Record<string, number>;
 
 export type ErrorCode = keyof typeof ERROR_CODES;
