@@ -9,6 +9,12 @@ import type { ConstraintErrors } from "../../core/pg-errors";
 import type { Tx, TxResult } from "../../core/tx";
 import { isUuid } from "../../core/validate";
 import { resolveHackathon } from "../hackathons/service";
+import {
+  cancelRequests,
+  declineForFullTeam,
+  lockPendingRequests,
+  reportDroppedRequests,
+} from "../requests/settlement";
 import { buildTeamCards, teamCardSelect, type TeamCardRow } from "./cards";
 import { insertInviteCode, normalizeInviteCode } from "./invite-codes";
 import type { CreateTeam } from "./schemas";
@@ -132,7 +138,10 @@ export async function createTeam(
     expiresInHours: input.inviteExpiresInHours,
   });
 
-  // TODO(4.1): cancel P's pending join requests in this hackathon (R9), via the §0.4 helper.
+  // R9: now that I'm on a team, my pending requests in this hackathon are moot (03 §0.4, the
+  // participant part of the batch; the new team has no requests yet).
+  const myRequests = await lockPendingRequests(tx, { participantId: participant.id });
+  const settlementEvents = await cancelRequests(tx, myRequests, "CREATED_TEAM", userId);
 
   await writeAudit(tx, [
     {
@@ -160,6 +169,7 @@ export async function createTeam(
   const [card] = await buildTeamCards(tx, [team]);
   const events: DomainEvent[] = [
     { channel: `hackathon:${hackathon.id}`, type: "team.created", payload: card },
+    ...settlementEvents,
   ];
 
   return {
@@ -377,14 +387,26 @@ export async function joinTeam(
     throw new AppError("TEAM_FULL", "This team is full.");
   }
 
-  // TODO(4.1): lock + settle requests (§0.4): mine → CANCELLED (R9); the team's → DECLINED
-  // TEAM_FULL if this join fills it (R24).
+  // 03 §0.4: ONE batch, sorted by id — my pending requests (always: R9), plus the team's if
+  // this join takes the last seat (R24). OPEN teams normally have none (requests only go to
+  // APPROVAL teams), but the rule lives in one place.
+  const fillsTeam = team.memberCount + 1 === team.maxSize;
+  const batch = await lockPendingRequests(tx, {
+    participantId: participant.id,
+    teamId: fillsTeam ? team.id : null,
+  });
+  const mine = batch.filter((request) => request.participantId === participant.id);
+  const theTeams = batch.filter((request) => request.participantId !== participant.id);
 
   const joined = await tx.$queryRaw<{ team_joined_at: Date }[]>`
     UPDATE participants SET team_id = ${team.id}::uuid, team_joined_at = now()
     WHERE id = ${participant.id}::uuid
     RETURNING team_joined_at`;
   const updated = await updateTeamRow(tx, team.id, { memberCountDelta: 1 });
+  const settlementEvents = [
+    ...(await cancelRequests(tx, mine, "JOINED_TEAM", userId)),
+    ...(await declineForFullTeam(tx, theTeams, userId)),
+  ];
 
   await writeAudit(tx, [
     {
@@ -404,7 +426,10 @@ export async function joinTeam(
   const [card] = await buildTeamCards(tx, [updated]);
   return {
     value: { team: toTeamView(updated), joinedAt: joined[0]!.team_joined_at },
-    events: [{ channel: `hackathon:${team.hackathonId}`, type: "team.updated", payload: card }],
+    events: [
+      { channel: `hackathon:${team.hackathonId}`, type: "team.updated", payload: card },
+      ...settlementEvents,
+    ],
   };
 }
 
@@ -471,10 +496,13 @@ export async function leaveTeamAsLockedMember(
     if (!iAmLeader) {
       throw internalError(new Error(`team ${team.id}: member_count 1 but leaver isn't leader`));
     }
-    // TODO(4.1): lock T's pending requests in id order (§0.4) BEFORE the delete cascades to
-    // them, then notify the requesters (request.cancelled) and audit each one.
-    // Invite codes go with the team (ON DELETE CASCADE). If a member were still left behind,
-    // RESTRICT on participants_team_fkey would refuse this delete.
+    // R23: lock the team's pending requests (sorted, 03 §0.4) BEFORE the delete cascades to
+    // them — a cascade deletes in no guaranteed order — and report them while the requesters
+    // can still be read.
+    const dropped = await lockPendingRequests(tx, { teamId: team.id });
+    const droppedEvents = await reportDroppedRequests(tx, dropped, input.userId);
+    // Invite codes and those requests go with the team (ON DELETE CASCADE). If a member were
+    // still left behind, RESTRICT on participants_team_fkey would refuse this delete.
     await tx.$executeRaw`DELETE FROM teams WHERE id = ${team.id}::uuid`;
 
     await writeAudit(tx, [
@@ -486,7 +514,11 @@ export async function leaveTeamAsLockedMember(
       {
         ...audit,
         action: "TEAM_DELETED",
-        metadata: { name: team.name, reason: "LAST_MEMBER_LEFT" },
+        metadata: {
+          name: team.name,
+          reason: "LAST_MEMBER_LEFT",
+          droppedRequests: dropped.length,
+        },
       },
     ]);
     return {
@@ -498,6 +530,7 @@ export async function leaveTeamAsLockedMember(
           type: "team.deleted",
           payload: { id: team.id, version: team.version + 1 },
         },
+        ...droppedEvents,
       ],
     };
   }

@@ -52,13 +52,15 @@ model User {
   /// Canonical IANA name (validated in the app against tzdata; R16).
   timezone       String  @default("Asia/Kolkata")
 
-  sessions     Session[]
-  accounts     Account[]
-  skills       UserSkill[]
-  hackathons   Hackathon[]
-  participants Participant[]
-  inviteCodes  InviteCode[]
-  idempotency  IdempotencyKey[]
+  sessions            Session[]
+  accounts            Account[]
+  skills              UserSkill[]
+  hackathons          Hackathon[]
+  participants        Participant[]
+  inviteCodes         InviteCode[]
+  idempotency         IdempotencyKey[]
+  /// Join requests this user decided (as leader) or caused to be cancelled.
+  decidedJoinRequests JoinRequest[]
 
   @@map("users")
 }
@@ -112,13 +114,14 @@ model Participant {
   /// Registration time.
   createdAt    DateTime  @default(dbgenerated("transaction_timestamp()")) @map("created_at") @db.Timestamptz
 
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  hackathon Hackathon @relation(fields: [hackathonId], references: [id], onDelete: Restrict)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hackathon    Hackathon     @relation(fields: [hackathonId], references: [id], onDelete: Restrict)
   /// Composite FK: the team must be in the SAME hackathon. RESTRICT: a team with members
   /// can't be deleted (R7 safety net). Unchecked while team_id is NULL (MATCH SIMPLE).
-  team      Team?     @relation("members", fields: [teamId, hackathonId], references: [id, hackathonId], onDelete: Restrict, onUpdate: Restrict, map: "participants_team_fkey")
+  team         Team?         @relation("members", fields: [teamId, hackathonId], references: [id, hackathonId], onDelete: Restrict, onUpdate: Restrict, map: "participants_team_fkey")
   /// Back side of teams_leader_fkey (a list: Prisma would otherwise demand a unique index).
-  leads     Team[]    @relation("leader")
+  leads        Team[]        @relation("leader")
+  joinRequests JoinRequest[]
 
   /// R3: register once per hackathon. Also resolves concurrent duplicate registrations (Flow 5).
   @@unique([userId, hackathonId])
@@ -179,12 +182,13 @@ model Team {
   updatedAt           DateTime   @default(dbgenerated("transaction_timestamp()")) @map("updated_at") @db.Timestamptz
 
   /// One FK does both jobs: the hackathon exists AND max_size equals its max_team_size.
-  hackathon   Hackathon     @relation(fields: [hackathonId, maxSize], references: [id, maxTeamSize], onDelete: Restrict, onUpdate: Restrict, map: "teams_hackathon_fkey")
+  hackathon    Hackathon     @relation(fields: [hackathonId, maxSize], references: [id, maxTeamSize], onDelete: Restrict, onUpdate: Restrict, map: "teams_hackathon_fkey")
   /// (leader_participant_id, id) → participants (id, team_id): the leader's team_id must be
   /// THIS team. Hand-written DEFERRABLE INITIALLY DEFERRED → checked at COMMIT (08 §S3).
-  leader      Participant   @relation("leader", fields: [leaderParticipantId, id], references: [id, teamId], onDelete: NoAction, onUpdate: NoAction, map: "teams_leader_fkey")
-  members     Participant[] @relation("members")
-  inviteCodes InviteCode[]
+  leader       Participant   @relation("leader", fields: [leaderParticipantId, id], references: [id, teamId], onDelete: NoAction, onUpdate: NoAction, map: "teams_leader_fkey")
+  members      Participant[] @relation("members")
+  inviteCodes  InviteCode[]
+  joinRequests JoinRequest[]
 
   /// Target for composite FKs (participants, join requests).
   @@unique([id, hackathonId])
@@ -387,4 +391,57 @@ model IdempotencyKey {
   /// Cleanup job (batched DELETE … WHERE expires_at < now(), 06 §8).
   @@index([expiresAt])
   @@map("idempotency_keys")
+}
+
+// ---------------------------------------------------------------------------
+// Join requests (step 4.1, 02 §3.6). Changed in batches ONLY through the settlement helper
+// (apps/web/src/server/modules/requests/settlement.ts, 03 §0.4): locked in one statement,
+// sorted by id. Status only ever changes FROM 'PENDING' (I5); a hand-written trigger
+// freezes decided rows.
+// ---------------------------------------------------------------------------
+
+enum JoinRequestStatus {
+  PENDING
+  APPROVED
+  DECLINED
+  CANCELLED
+
+  @@map("join_request_status")
+}
+
+/// Why a request was declined. Only LEADER blocks a re-request (R13); TEAM_FULL doesn't (R24).
+enum DeclineReason {
+  LEADER
+  TEAM_FULL
+
+  @@map("decline_reason")
+}
+
+model JoinRequest {
+  id              String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  hackathonId     String            @map("hackathon_id") @db.Uuid
+  participantId   String            @map("participant_id") @db.Uuid
+  teamId          String            @map("team_id") @db.Uuid
+  status          JoinRequestStatus @default(PENDING)
+  /// Set iff status = DECLINED (hand-written CHECK).
+  declineReason   DeclineReason?    @map("decline_reason")
+  /// Who decided: the leader (approve/decline) or the user whose action settled it (cancel).
+  decidedByUserId String?           @map("decided_by_user_id") @db.Uuid
+  /// Set iff status <> PENDING (hand-written CHECK).
+  decidedAt       DateTime?         @map("decided_at") @db.Timestamptz
+  createdAt       DateTime          @default(dbgenerated("transaction_timestamp()")) @map("created_at") @db.Timestamptz
+
+  /// Composite FKs: request, participant and team are always in the SAME hackathon.
+  /// CASCADE: a withdrawn participant's / deleted team's requests go with them (locked first, 03 §0.4).
+  participant Participant @relation(fields: [participantId, hackathonId], references: [id, hackathonId], onDelete: Cascade, onUpdate: Restrict, map: "join_requests_participant_fkey")
+  team        Team        @relation(fields: [teamId, hackathonId], references: [id, hackathonId], onDelete: Cascade, onUpdate: Restrict, map: "join_requests_team_fkey")
+  decidedBy   User?       @relation(fields: [decidedByUserId], references: [id], onDelete: SetNull)
+
+  /// Leader inbox (keyset) + the team part of settlement.
+  @@index([teamId, status, createdAt, id])
+  /// The participant part of settlement (R9).
+  @@index([participantId, status])
+  /// "My requests".
+  @@index([participantId, createdAt(sort: Desc)])
+  @@map("join_requests")
 }
