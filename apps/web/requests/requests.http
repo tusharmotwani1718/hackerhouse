@@ -30,3 +30,22 @@ Origin: {{origin}}
 Idempotency-Key: {{$guid}}
 
 {}
+
+# ---------------------------------------------------------------- Step 4.4 — request reads
+@teamId = REPLACE_WITH_YOUR_TEAM_ID
+@hackathon = REPLACE_WITH_A_HACKATHON_SLUG
+
+### Leader inbox (leader only): pending oldest first; other statuses newest first.
+### { data: { requests: [{ …, requester: { participantId, name, githubUsername, portfolioUrl,
+### skills } }], totalCount }, nextCursor }. A cursor only works for the status it came from.
+GET {{base}}/api/teams/{{teamId}}/requests?status=PENDING&limit=20
+
+### Inbox: declined ones
+GET {{base}}/api/teams/{{teamId}}/requests?status=DECLINED
+
+### My requests in a hackathon (every status, newest first, with a team summary).
+### Not registered → an empty list.
+GET {{base}}/api/hackathons/{{hackathon}}/me/requests
+
+### Team page: viewer.myRequest = my most recent request to this team (or null)
+GET {{base}}/api/teams/{{teamId}}

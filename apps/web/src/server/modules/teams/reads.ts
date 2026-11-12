@@ -1,11 +1,12 @@
 import "server-only";
 
 import { Prisma, type JoinPolicy, type Skill, type TeamAccess } from "@hacker-house/db";
-import { z } from "zod";
 
 import { AppError } from "../../core/errors";
+import { afterCursor, cursorTimestamp, decodeCursor, keysetOrder, pageOf } from "../../core/keyset";
 import type { Tx } from "../../core/tx";
 import { isUuid } from "../../core/validate";
+import { latestRequestTo, type MyRequestSummary } from "../requests/reads";
 import {
   buildTeamCards,
   teamCardSelect,
@@ -22,36 +23,8 @@ import type { ListTeamsQuery } from "./schemas";
  *  - members + skills for a whole page in one query (RD7).
  */
 
-// ------------------------------------------------------------------------------------- cursor
-
-/**
- * Keyset position = the last row's (created_at, id). created_at has MICROSECOND precision
- * (Postgres clock) but a JS Date only holds milliseconds, so the timestamp is carried as the
- * exact text Postgres printed (cursorTs, below) and parsed back by Postgres — never via Date.
- * Rows of one transaction share a created_at, so `id` breaks the ties.
- */
-const cursorSchema = z.object({
-  c: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/),
-  i: z.string().refine(isUuid),
-});
-type Cursor = z.output<typeof cursorSchema>;
-
-function encodeCursor(cursor: Cursor): string {
-  return Buffer.from(JSON.stringify(cursor)).toString("base64url");
-}
-
-function decodeCursor(text: string): Cursor {
-  try {
-    return cursorSchema.parse(JSON.parse(Buffer.from(text, "base64url").toString("utf8")));
-  } catch {
-    throw new AppError("VALIDATION_FAILED", "Invalid query parameters.", {
-      details: [{ path: "cursor", message: "is not a valid cursor; use nextCursor as returned" }],
-    });
-  }
-}
-
-/** created_at as UTC text with all 6 fractional digits, e.g. 2026-11-11T06:37:00.831195Z. */
-const cursorTs = Prisma.sql`to_char(t.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+// Keyset cursor helpers (microsecond-exact timestamps, tie-break on id): core/keyset.ts.
+const KEYSET = { ts: "t.created_at", id: "t.id" };
 
 /** `q` is matched literally: %, _ and \ would otherwise be LIKE wildcards / the escape char. */
 function escapeLike(text: string): string {
@@ -96,27 +69,22 @@ export async function listTeams(
   const matches = Prisma.join(filters, " AND ");
 
   const cursor = query.cursor ? decodeCursor(query.cursor) : null;
-  const position = cursor
-    ? Prisma.sql`AND (t.created_at, t.id) < (${cursor.c}::timestamptz, ${cursor.i}::uuid)`
-    : Prisma.empty;
 
   // limit + 1: the extra row only tells us whether a next page exists.
   const rows = await tx.$queryRaw<RawCardRow[]>`
     SELECT t.id, t.name, t.description, t.join_policy, t.access, t.is_looking, t.member_count,
-           t.max_size, t.version, t.created_at, t.leader_participant_id, ${cursorTs} AS cursor_ts
+           t.max_size, t.version, t.created_at, t.leader_participant_id,
+           ${cursorTimestamp(KEYSET.ts)} AS cursor_ts
     FROM teams t
-    WHERE ${matches} ${position}
-    ORDER BY t.created_at DESC, t.id DESC
+    WHERE ${matches} ${afterCursor(cursor, KEYSET, "desc")}
+    ${keysetOrder(KEYSET, "desc")}
     LIMIT ${query.limit + 1}`;
 
   // Same filters, no cursor: how many teams match in total (05 §3, query 3).
   const [count] = await tx.$queryRaw<{ n: number }[]>`
     SELECT count(*)::int AS n FROM teams t WHERE ${matches}`;
 
-  const page = rows.slice(0, query.limit);
-  const last = page.at(-1);
-  const nextCursor =
-    rows.length > query.limit && last ? encodeCursor({ c: last.cursor_ts, i: last.id }) : null;
+  const { page, nextCursor } = pageOf(rows, query.limit);
 
   const teams = await buildTeamCards(
     tx,
@@ -158,8 +126,11 @@ export type TeamPage = {
   viewer: {
     isMember: boolean;
     isLeader: boolean;
-    /** TODO(4.4): my pending/declined request to this team. */
-    myRequest: null;
+    /**
+     * My most recent request to this team, or null (never requested / not registered). The latest
+     * is enough: at most one is pending, and nothing can follow a LEADER decline (R13).
+     */
+    myRequest: MyRequestSummary | null;
   };
 };
 
@@ -195,6 +166,7 @@ export async function getTeamPage(tx: Tx, viewerUserId: string, teamId: string):
     select: { id: true, teamId: true },
   });
   const isMember = viewer?.teamId === team.id;
+  const myRequest = viewer ? await latestRequestTo(tx, viewer.id, team.id) : null;
 
   return {
     team: toTeamCard(
@@ -214,7 +186,7 @@ export async function getTeamPage(tx: Tx, viewerUserId: string, teamId: string):
     viewer: {
       isMember,
       isLeader: isMember && viewer?.id === team.leaderParticipantId,
-      myRequest: null,
+      myRequest,
     },
   };
 }

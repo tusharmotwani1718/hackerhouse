@@ -441,7 +441,8 @@ model JoinRequest {
   @@index([teamId, status, createdAt, id])
   /// The participant part of settlement (R9).
   @@index([participantId, status])
-  /// "My requests".
-  @@index([participantId, createdAt(sort: Desc)])
+  /// "My requests" (keyset: newest first). `id` is in the index so ORDER BY created_at, id and
+  /// the (created_at, id) cursor comparison are served by it without a sort (4.4 EXPLAIN).
+  @@index([participantId, createdAt(sort: Desc), id(sort: Desc)])
   @@map("join_requests")
 }
