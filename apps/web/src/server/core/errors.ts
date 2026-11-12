@@ -50,6 +50,13 @@ export const ERROR_CODES = {
   REQUEST_ALREADY_PENDING: 409,
   /** The leader declined an earlier request; no re-request in v1 (R13). */
   PREVIOUSLY_DECLINED: 409,
+
+  // Deciding requests (step 4.3)
+  REQUEST_NOT_FOUND: 404,
+  /** Only the team's current leader may approve or decline (R4). */
+  NOT_LEADER: 403,
+  /** Already approved, declined or cancelled; `details` carries the current status. */
+  REQUEST_NOT_PENDING: 409,
 } as const satisfies Record<string, number>;
 
 export type ErrorCode = keyof typeof ERROR_CODES;

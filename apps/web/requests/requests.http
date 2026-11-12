@@ -1,0 +1,32 @@
+# Step 4.3 — the leader decides on join requests (Flow 2, 2b). Run `bun run dev`; VS Code
+# "REST Client" keeps cookies. Sign in as the team's LEADER. Until the inbox exists (4.4), take a
+# request id from the database (join_requests.id).
+@base = http://localhost:3000
+@origin = http://localhost:3000
+@requestId = REPLACE_WITH_A_PENDING_REQUEST_ID
+
+### Sign in as the leader
+POST {{base}}/api/auth/sign-in/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{ "email": "pat@example.com", "password": "REPLACE_ME" }
+
+### Approve → 200 { request, team }. The requester joins; their other pending requests are
+### cancelled (APPROVED_ELSEWHERE); if the team is now full, its other requests are declined
+### (TEAM_FULL). Not the leader → 403 NOT_LEADER. Already decided → 409 REQUEST_NOT_PENDING
+### (details: status). Team already full → 409 TEAM_FULL, committed: the request is declined.
+POST {{base}}/api/requests/{{requestId}}/approve
+Content-Type: application/json
+Origin: {{origin}}
+Idempotency-Key: {{$guid}}
+
+{}
+
+### Decline → 200 { request } (DECLINED, reason LEADER: no re-request to this team, R13)
+POST {{base}}/api/requests/{{requestId}}/decline
+Content-Type: application/json
+Origin: {{origin}}
+Idempotency-Key: {{$guid}}
+
+{}

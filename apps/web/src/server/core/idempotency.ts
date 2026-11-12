@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 
 import type { Prisma } from "@hacker-house/db";
 
+import { getRequestContext } from "./context";
 import { AppError, internalError } from "./errors";
 import { logger } from "./logger";
 import type { ConstraintErrors } from "./pg-errors";
@@ -126,11 +127,18 @@ export type MutationOptions = {
 };
 
 /**
- * What a service returns to runMutation: runTx's `{ value, events? }`, plus an optional success
- * status for services that only learn inside the transaction which outcome applies (redeem:
- * 200 JOINED or 201 REQUESTED). It wins over `options.status`.
+ * What a service returns to runMutation. Either:
+ *  - success: runTx's `{ value, events? }`, plus an optional status for services that only learn
+ *    inside the transaction which outcome applies (redeem: 200 JOINED or 201 REQUESTED); it wins
+ *    over `options.status`;
+ *  - a COMMITTED error (01 §8): state changed, yet the answer is an error — today only "approve
+ *    on a full team" (the request is auto-declined, 409 TEAM_FULL). The transaction commits, the
+ *    error envelope is stored as the idempotent response, events are published. A thrown
+ *    AppError, by contrast, rolls everything back and is never stored.
  */
-export type MutationResult<T> = TxResult<T> & { status?: number };
+export type MutationResult<T> =
+  | (TxResult<T> & { status?: number })
+  | { committedError: AppError; events?: TxResult<T>["events"] };
 
 /**
  * Run a flow mutation with an idempotency key. The route authenticates and validates first
@@ -159,10 +167,27 @@ export async function runMutation<T>(
       }
 
       const result = await fn(tx);
-      const status = result.status ?? options.status ?? 200;
+      const status =
+        "committedError" in result
+          ? result.committedError.status
+          : (result.status ?? options.status ?? 200);
+      const envelope =
+        "committedError" in result
+          ? {
+              // Same shape as errorResponse (http.ts): the client can't tell it from a normal error.
+              error: {
+                code: result.committedError.code,
+                message: result.committedError.message,
+                ...(result.committedError.details !== undefined && {
+                  details: result.committedError.details,
+                }),
+                requestId: getRequestContext()?.requestId,
+              },
+            }
+          : { data: result.value };
       // Normalize through JSON once (Dates → ISO strings) so the first response and every
       // replay are built from the very same stored value.
-      const body = JSON.parse(JSON.stringify({ data: result.value })) as Prisma.InputJsonObject;
+      const body = JSON.parse(JSON.stringify(envelope)) as Prisma.InputJsonObject;
       await tx.idempotencyKey.update({
         where: { id: claimId },
         data: { responseStatus: status, responseBody: body },

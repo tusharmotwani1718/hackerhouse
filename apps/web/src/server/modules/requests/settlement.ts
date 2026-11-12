@@ -29,7 +29,12 @@ export type LockedRequest = {
 };
 
 /** Why a request was cancelled; shown to the requester and kept in the audit log. */
-export type CancelReason = "JOINED_TEAM" | "CREATED_TEAM" | "TEAM_DELETED" | "WITHDREW";
+export type CancelReason =
+  | "JOINED_TEAM" // I joined an OPEN team
+  | "CREATED_TEAM" // I created a team
+  | "APPROVED_ELSEWHERE" // another team's leader approved me (4.3)
+  | "TEAM_DELETED" // the team I requested was deleted
+  | "WITHDREW"; // I withdrew from the hackathon (5.2)
 
 /** The batch of a transaction: `participantId`'s pending requests ∪ (union) `teamId`'s pending requests. */
 export async function lockPendingRequests(
