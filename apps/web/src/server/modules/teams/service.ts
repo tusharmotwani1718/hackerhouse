@@ -209,6 +209,7 @@ type LockedTeam = {
   maxSize: number;
   leaderParticipantId: string;
   version: number;
+  isLooking: boolean;
 };
 
 /**
@@ -235,9 +236,10 @@ export async function lockTeam(
       max_size: number;
       leader_participant_id: string;
       version: number;
+      is_looking: boolean;
     }[]
   >(Prisma.sql`
-    SELECT id, hackathon_id, name, member_count, max_size, leader_participant_id, version
+    SELECT id, hackathon_id, name, member_count, max_size, leader_participant_id, version, is_looking
     FROM teams
     WHERE id = ${teamId}::uuid
     FOR ${Prisma.raw(mode)}`);
@@ -251,6 +253,7 @@ export async function lockTeam(
     maxSize: row.max_size,
     leaderParticipantId: row.leader_participant_id,
     version: row.version,
+    isLooking: row.is_looking,
   };
 }
 
