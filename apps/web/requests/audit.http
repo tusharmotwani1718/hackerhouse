@@ -1,0 +1,25 @@
+# Step 5.4 — team activity logs. Run `bun run dev`; VS Code "REST Client" keeps cookies.
+@base = http://localhost:3000
+@origin = http://localhost:3000
+@teamId = REPLACE_WITH_A_TEAM_ID
+@hackathon = REPLACE_WITH_A_HACKATHON_SLUG
+
+### Sign in (the team's leader, or an admin)
+POST {{base}}/api/auth/sign-in/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{ "email": "pat@example.com", "password": "REPLACE_ME" }
+
+### Team log — the CURRENT LEADER (live team) or an ADMIN (any team, incl. deleted ones).
+### Newest first: { data: { entries: [{ id, action, createdAt, actor: { name },
+### target: { name }, details }] }, nextCursor }. Admins also get actorUserId, targetUserId,
+### metadata, requestId. Not the leader → 403 NOT_LEADER.
+GET {{base}}/api/teams/{{teamId}}/audit?limit=20
+
+### …filtered: category = team | requests | invites
+GET {{base}}/api/teams/{{teamId}}/audit?category=requests
+
+### ADMIN only: a hackathon's deleted teams (from their TEAM_DELETED rows). Open one with the
+### team-log request above, using its teamId.
+GET {{base}}/api/admin/hackathons/{{hackathon}}/deleted-teams
