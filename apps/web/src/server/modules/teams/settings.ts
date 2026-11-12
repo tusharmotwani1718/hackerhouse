@@ -143,10 +143,6 @@ export async function regenerateInviteCode(
     WHERE team_id = ${team.id}::uuid AND revoked_at IS NULL
     RETURNING id`;
 
-  if (revoked.length === 0) {
-    throw new AppError("NO_ACTIVE_CODE", "This team has no invite code to revoke.");
-  }
-
   const invite = await insertInviteCode(tx, {
     teamId: team.id,
     createdByUserId: userId,
