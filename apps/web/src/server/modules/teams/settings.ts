@@ -143,6 +143,10 @@ export async function regenerateInviteCode(
     WHERE team_id = ${team.id}::uuid AND revoked_at IS NULL
     RETURNING id`;
 
+  if (revoked.length === 0) {
+    throw new AppError("NO_ACTIVE_CODE", "This team has no invite code to revoke.");
+  }
+
   const invite = await insertInviteCode(tx, {
     teamId: team.id,
     createdByUserId: userId,
@@ -174,5 +178,51 @@ export async function regenerateInviteCode(
       active: true,
       expiresAt: invite.expiresAt,
     }),
+  };
+}
+
+// ---------------------------------------------------------------- 9c: revoke the invite code
+
+export type RevokedInvite = { teamId: string; revoked: true };
+
+/**
+ * 9c: revoke the current code, leaving the team with none (members can still join from the
+ * board if the team is PUBLIC; an INVITE_ONLY team is closed until a new code is generated).
+ * Requires an Idempotency-Key: a double click then replays the 200 instead of a confusing 404.
+ *
+ * Under the team lock (I7): a redeem re-checks its code under the same lock, so once this
+ * commits the code admits no one. One conditional UPDATE (it locks the rows it changes); it
+ * also revokes an expired-but-unrevoked code (03: "0 rows → NO_ACTIVE_CODE").
+ */
+export async function revokeInviteCode(
+  tx: Tx,
+  userId: string,
+  teamId: string,
+): Promise<TxResult<RevokedInvite>> {
+  if (!isUuid(teamId)) throw teamNotFound();
+  const team = await lockTeam(tx, teamId, "NO KEY UPDATE");
+  await assertLeader(tx, userId, team, "Only this team's leader can manage its invite code.");
+
+  const revoked = await tx.$queryRaw<{ id: string }[]>`
+    UPDATE invite_codes SET revoked_at = now()
+    WHERE team_id = ${team.id}::uuid AND revoked_at IS NULL
+    RETURNING id`;
+  if (revoked.length === 0) {
+    throw new AppError("NO_ACTIVE_CODE", "This team has no invite code to revoke.");
+  }
+
+  await writeAudit(
+    tx,
+    revoked.map((row) => ({
+      action: "INVITE_CODE_REVOKED" as const,
+      hackathonId: team.hackathonId,
+      teamId: team.id,
+      actorUserId: userId,
+      metadata: { inviteCodeId: row.id, reason: "REVOKED" },
+    })),
+  );
+  return {
+    value: { teamId: team.id, revoked: true },
+    events: await inviteUpdatedEvents(tx, team.id, { teamId: team.id, active: false }),
   };
 }

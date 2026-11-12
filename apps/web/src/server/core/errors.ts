@@ -62,6 +62,10 @@ export const ERROR_CODES = {
   MEMBER_NOT_FOUND: 404,
   /** The leader can't remove themselves; leaving is a different flow (3.5). */
   CANNOT_REMOVE_SELF: 409,
+
+  // Team settings & invite codes (step 5.3)
+  /** The team has no code to revoke (9c) or show (9d). */
+  NO_ACTIVE_CODE: 404,
 } as const satisfies Record<string, number>;
 
 export type ErrorCode = keyof typeof ERROR_CODES;
