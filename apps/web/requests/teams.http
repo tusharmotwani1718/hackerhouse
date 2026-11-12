@@ -142,3 +142,29 @@ Origin: {{origin}}
 Idempotency-Key: {{$guid}}
 
 {}
+
+# ---------------------------------------------------------------- Step 5.3 — settings & invite codes (Flow 9)
+
+### 9a — leader: looking for teammates on/off. No Idempotency-Key ("set to this value").
+### Same value again → 200, no change. On while full → 409 TEAM_FULL.
+PATCH {{base}}/api/teams/{{teamId}}
+Content-Type: application/json
+Origin: {{origin}}
+
+{ "isLooking": false }
+
+### 9b — leader: regenerate (revokes the current code). Same key → the SAME new code.
+POST {{base}}/api/teams/{{teamId}}/invite-code
+Content-Type: application/json
+Origin: {{origin}}
+Idempotency-Key: {{$guid}}
+
+{ "expiresInHours": 72 }
+
+### 9c — leader: revoke (no body). None → 404 NO_ACTIVE_CODE.
+DELETE {{base}}/api/teams/{{teamId}}/invite-code
+Origin: {{origin}}
+Idempotency-Key: {{$guid}}
+
+### 9d — any member: view the active code. Not a member → 403 MEMBERS_ONLY; none → 404.
+GET {{base}}/api/teams/{{teamId}}/invite-code
