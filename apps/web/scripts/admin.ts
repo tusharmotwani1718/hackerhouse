@@ -245,7 +245,7 @@ async function demote(db: Db, options: Options) {
     // meantime, so it sees the new, smaller set. Count-then-update without the lock is
     // check-then-act: two demotes could both see "2 admins" and leave zero.
     const admins = await tx.$queryRaw<{ id: string; email: string }[]>`
-      SELECT id, email FROM users WHERE role = 'ADMIN' ORDER BY id FOR UPDATE`;
+      SELECT id, email FROM users WHERE role = 'ADMIN' ORDER BY id FOR NO KEY UPDATE`; // role isn't a key: don't block FK checks
     const target = admins.find((admin) => admin.email === email);
     if (!target) {
       const exists = await tx.user.findUnique({ where: { email } });

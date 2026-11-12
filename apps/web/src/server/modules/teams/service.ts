@@ -68,6 +68,23 @@ export const createTeamConstraintErrors: ConstraintErrors = {
 };
 
 /**
+ * PARTICIPANT_LOCK — every participant row lock is `FOR NO KEY UPDATE`, never `FOR UPDATE`.
+ *
+ * FK checks lock the REFERENCED row with `FOR KEY SHARE`. The deferred leader FK
+ * (teams_leader_fkey → participants (id, team_id)) is checked at COMMIT, so a leave that passes
+ * leadership to S (3.5 case C) takes KEY SHARE on S's participant row at COMMIT — while still
+ * holding the team lock. If another transaction holds S's row FOR UPDATE and waits for that
+ * team (S's own leave; a removal of S), each waits for the other: a deadlock (found in 5.1:
+ * 6 deadlocks in 5 rounds of "everyone leaves at once", hidden by runTx's retry).
+ *
+ * NO KEY UPDATE conflicts with NO KEY UPDATE and FOR UPDATE — so participant locks still
+ * serialize every flow exactly as before — but NOT with KEY SHARE, so the FK check passes and
+ * no cycle forms. When a flow later changes `team_id` (a key column: it's in the unique
+ * (id, team_id) index), Postgres upgrades the lock; that only ever happens while holding the
+ * team lock, which any transaction checking that FK for this team also needs first.
+ */
+
+/**
  * Lock the caller's participant row in this hackathon (I1: participants come first), or 403.
  * After this returns, `teamId` is current and can't change until we commit (I3).
  */
@@ -76,10 +93,11 @@ export async function lockOwnParticipant(
   userId: string,
   hackathonId: string,
 ): Promise<{ id: string; teamId: string | null }> {
+  // FOR NO KEY UPDATE (PARTICIPANT_LOCK): see the note on it below.
   const rows = await tx.$queryRaw<{ id: string; team_id: string | null }[]>`
     SELECT id, team_id FROM participants
     WHERE user_id = ${userId}::uuid AND hackathon_id = ${hackathonId}::uuid
-    FOR UPDATE`;
+    FOR NO KEY UPDATE`;
   const row = rows[0];
   if (!row) {
     throw new AppError("NOT_REGISTERED", "Register for this hackathon first.");
@@ -234,6 +252,27 @@ export async function lockTeam(
     leaderParticipantId: row.leader_participant_id,
     version: row.version,
   };
+}
+
+/**
+ * Under the TEAM lock: is the actor this team's leader? Leadership changes only under the team
+ * lock (leave, 3.5), which the caller holds, so leader_participant_id is frozen. Mapping the
+ * actor to their participant row is a plain read (that row's id never changes); not locking it
+ * avoids taking two participant locks (the one being acted on + the actor), which would need
+ * sorting (I1) for no gain. Returns the leader's participant id.
+ */
+export async function assertLeader(
+  tx: Tx,
+  userId: string,
+  team: { hackathonId: string; leaderParticipantId: string },
+  message = "Only this team's leader can do this.",
+): Promise<string> {
+  const me = await tx.participant.findUnique({
+    where: { userId_hackathonId: { userId, hackathonId: team.hackathonId } },
+    select: { id: true },
+  });
+  if (me?.id !== team.leaderParticipantId) throw new AppError("NOT_LEADER", message);
+  return me.id;
 }
 
 type RawTeamRow = {

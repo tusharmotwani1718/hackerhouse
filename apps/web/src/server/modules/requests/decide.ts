@@ -9,7 +9,7 @@ import type { MutationResult } from "../../core/idempotency";
 import type { Tx } from "../../core/tx";
 import { isUuid } from "../../core/validate";
 import { buildTeamCards } from "../teams/cards";
-import { lockTeam, toTeamView, updateTeamRow, type TeamView } from "../teams/service";
+import { assertLeader, lockTeam, toTeamView, updateTeamRow, type TeamView } from "../teams/service";
 import { cancelRequests, declineForFullTeam, lockPendingRequests } from "./settlement";
 
 export type DecidedRequest = {
@@ -41,25 +41,7 @@ async function readRequestTarget(tx: Tx, requestId: string): Promise<RequestTarg
 
 const requestNotFound = () => new AppError("REQUEST_NOT_FOUND", "Join request not found.");
 
-/**
- * Under the TEAM lock: is the actor this team's leader? Leadership changes only under the team
- * lock (leave, 3.5), which we hold, so leader_participant_id is frozen. Mapping the actor to
- * their participant row is a plain read (that row's id never changes); not locking it avoids
- * taking two participant locks (requester + actor), which would need sorting (I1) for no gain.
- */
-async function assertLeader(
-  tx: Tx,
-  userId: string,
-  team: { hackathonId: string; leaderParticipantId: string },
-): Promise<void> {
-  const me = await tx.participant.findUnique({
-    where: { userId_hackathonId: { userId, hackathonId: team.hackathonId } },
-    select: { id: true },
-  });
-  if (me?.id !== team.leaderParticipantId) {
-    throw new AppError("NOT_LEADER", "Only this team's leader can decide on join requests.");
-  }
-}
+const LEADER_ONLY = "Only this team's leader can decide on join requests.";
 
 /** The request is no longer pending: say what it became (or 404 if it's gone). */
 async function notPending(tx: Tx, requestId: string): Promise<AppError> {
@@ -111,12 +93,12 @@ export async function approveRequest(
 
   const requesters = await tx.$queryRaw<{ id: string; team_id: string | null; user_id: string }[]>`
     SELECT id, team_id, user_id FROM participants WHERE id = ${target.participantId}::uuid
-    FOR UPDATE`;
+    FOR NO KEY UPDATE`; // PARTICIPANT_LOCK (teams/service.ts)
   const requester = requesters[0];
   if (!requester) throw requestNotFound(); // withdrew meanwhile (the request went with them)
 
   const team = await lockTeam(tx, target.teamId, "NO KEY UPDATE");
-  await assertLeader(tx, userId, team);
+  await assertLeader(tx, userId, team, LEADER_ONLY);
 
   // 03 §0.4: ONE sorted batch — the requester's pending requests (always; r is one of them),
   // plus the team's if this approval fills it, or if it is already full (auto-decline below).
@@ -234,7 +216,7 @@ export async function declineRequest(
 ): Promise<MutationResult<DeclinedRequest>> {
   const target = await readRequestTarget(tx, requestId);
   const team = await lockTeam(tx, target.teamId, "NO KEY UPDATE");
-  await assertLeader(tx, userId, team);
+  await assertLeader(tx, userId, team, LEADER_ONLY);
 
   const declined = await tx.$queryRaw<{ decided_at: Date }[]>`
     UPDATE join_requests

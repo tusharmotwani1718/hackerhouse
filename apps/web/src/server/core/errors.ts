@@ -57,6 +57,11 @@ export const ERROR_CODES = {
   NOT_LEADER: 403,
   /** Already approved, declined or cancelled; `details` carries the current status. */
   REQUEST_NOT_PENDING: 409,
+
+  // Removing members (step 5.1)
+  MEMBER_NOT_FOUND: 404,
+  /** The leader can't remove themselves; leaving is a different flow (3.5). */
+  CANNOT_REMOVE_SELF: 409,
 } as const satisfies Record<string, number>;
 
 export type ErrorCode = keyof typeof ERROR_CODES;

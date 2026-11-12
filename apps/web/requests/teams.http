@@ -129,3 +129,16 @@ Origin: {{origin}}
 Idempotency-Key: {{$guid}}
 
 {}
+
+# ---------------------------------------------------------------- Step 5.1 — remove a member (Flow 7)
+# Leader only. participantId comes from the team page's member list. 200 { teamId,
+# removedParticipantId, team }. Yourself → 409 CANNOT_REMOVE_SELF (leave instead); not in this team
+# → 409 NOT_A_MEMBER; unknown → 404 MEMBER_NOT_FOUND. The removed member may re-join (R25).
+@participantId = REPLACE_WITH_A_MEMBER_PARTICIPANT_ID
+
+POST {{base}}/api/teams/{{teamId}}/members/{{participantId}}/remove
+Content-Type: application/json
+Origin: {{origin}}
+Idempotency-Key: {{$guid}}
+
+{}

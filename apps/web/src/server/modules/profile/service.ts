@@ -74,7 +74,9 @@ export async function getProfile(tx: Tx, userId: string): Promise<Profile> {
  * leaves them in place and adds its own → a mix of both sets, or a primary-key error.
  */
 export async function updateProfile(tx: Tx, userId: string, patch: ProfilePatch): Promise<Profile> {
-  await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId}::uuid FOR UPDATE`;
+  // NO KEY UPDATE: serializes profile updates without blocking FK checks (KEY SHARE) from the
+  // user's other writes, e.g. every mutation's idempotency claim (see PARTICIPANT_LOCK).
+  await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId}::uuid FOR NO KEY UPDATE`;
 
   const { skills, ...fields } = patch;
   if (Object.keys(fields).length > 0) {
