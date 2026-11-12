@@ -7,7 +7,7 @@
 //        needed). Requires an `Idempotency-Key`. 200 { teamId, revoked: true }; none → 404
 //        NO_ACTIVE_CODE.
 // GET    /api/teams/{teamId}/invite-code — any current member views the active code, Flow 9d.
-//        200 { code, expiresAt, createdAt }. Not a member → 403 NOT_A_MEMBER; none (revoked or
+//        200 { code, expiresAt, createdAt }. Not a member → 403 MEMBERS_ONLY; none (revoked or
 //        expired) → 404 NO_ACTIVE_CODE.
 import { z } from "zod";
 

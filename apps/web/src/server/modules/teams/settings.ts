@@ -245,7 +245,7 @@ export async function getInviteCode(tx: Tx, userId: string, teamId: string): Pro
     select: { teamId: true },
   });
   if (me?.teamId !== team.id) {
-    throw new AppError("NOT_A_MEMBER", "Only this team's members can see its invite code.");
+    throw new AppError("MEMBERS_ONLY", "Only this team's members can see its invite code.");
   }
 
   const rows = await tx.$queryRaw<{ code: string; expires_at: Date; created_at: Date }[]>`

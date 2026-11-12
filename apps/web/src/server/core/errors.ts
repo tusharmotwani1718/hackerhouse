@@ -66,6 +66,11 @@ export const ERROR_CODES = {
   // Team settings & invite codes (step 5.3)
   /** The team has no code to revoke (9c) or show (9d). */
   NO_ACTIVE_CODE: 404,
+  /**
+   * Access control: only the team's current members may see this (the invite code, 9d). 403 —
+   * unlike NOT_A_MEMBER (409), which means "you can't leave/be removed from a team you're not in".
+   */
+  MEMBERS_ONLY: 403,
 } as const satisfies Record<string, number>;
 
 export type ErrorCode = keyof typeof ERROR_CODES;
