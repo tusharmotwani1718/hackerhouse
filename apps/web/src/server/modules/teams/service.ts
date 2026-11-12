@@ -291,13 +291,19 @@ export async function updateTeamRow(
 
 // ---------------------------------------------------------------------------------- join (Flow 1)
 
-/** How the user is joining: from the board by team id, or by redeeming an invite code. */
-export type JoinEntry = { via: "board"; teamId: string } | { via: "code"; code: string };
+/** How the user reaches a team: from the board by team id, or by redeeming an invite code. */
+export type TeamEntry = { via: "board"; teamId: string } | { via: "code"; code: string };
 
 export type JoinedTeam = { team: TeamView; joinedAt: Date };
 
-/** What the pre-lock step resolved: the team, and the code row when joining by code. */
-type JoinTarget = { teamId: string; hackathonId: string; inviteCodeId: string | null };
+/** What the pre-lock step resolved: the team, its policy, and the code row on the code path. */
+export type EntryTarget = {
+  via: TeamEntry["via"];
+  teamId: string;
+  hackathonId: string;
+  joinPolicy: JoinPolicy;
+  inviteCodeId: string | null;
+};
 
 const invalidCode = () =>
   new AppError(
@@ -306,11 +312,12 @@ const invalidCode = () =>
   );
 
 /**
- * Pre-lock (I4): reads only fields that never change (team id, hackathon, join policy, access;
- * a code's team). They pick the flow and the target; every decision that depends on mutable
- * state (seats, membership, code validity) is made again after locking.
+ * Pre-lock (I4), shared by join (Flow 1) and request (Flow 4): reads only fields that never
+ * change (team id, hackathon, join policy, access; a code's team). They pick the flow and the
+ * target; every decision on mutable state (seats, membership, code validity) is made again
+ * after locking. The caller then requires the policy its flow needs.
  */
-async function resolveJoinTarget(tx: Tx, entry: JoinEntry): Promise<JoinTarget> {
+export async function resolveEntryTarget(tx: Tx, entry: TeamEntry): Promise<EntryTarget> {
   if (entry.via === "board") {
     const team = isUuid(entry.teamId)
       ? await tx.team.findUnique({
@@ -320,19 +327,22 @@ async function resolveJoinTarget(tx: Tx, entry: JoinEntry): Promise<JoinTarget> 
       : null;
     if (!team) throw new AppError("TEAM_NOT_FOUND", "Team not found.");
     if (team.access === "INVITE_ONLY") {
-      throw new AppError("INVITE_REQUIRED", "This team is invite-only. Join with its invite code.");
+      throw new AppError("INVITE_REQUIRED", "This team is invite-only. Use its invite code.");
     }
-    if (team.joinPolicy === "APPROVAL") {
-      throw new AppError("APPROVAL_REQUIRED", "This team approves members. Send a join request.");
-    }
-    return { teamId: team.id, hackathonId: team.hackathonId, inviteCodeId: null };
+    return {
+      via: "board",
+      teamId: team.id,
+      hackathonId: team.hackathonId,
+      joinPolicy: team.joinPolicy,
+      inviteCodeId: null,
+    };
   }
 
   const code = normalizeInviteCode(entry.code);
   if (!code) throw invalidCode();
-  // Validity is checked here too, before the team's policy is revealed: otherwise a revoked
-  // code of an APPROVAL team would answer APPROVAL_REQUIRED, telling a guesser it existed.
-  // The authoritative check is repeated under the team lock (I7). Both use the DB clock.
+  // Validity is checked here, BEFORE the team's policy can show in an answer: otherwise a
+  // revoked code of an APPROVAL team would get a different reply than a wrong code, telling a
+  // guesser it existed. The authoritative check is repeated under the team lock (I7). DB clock.
   const rows = await tx.$queryRaw<
     { invite_id: string; team_id: string; hackathon_id: string; join_policy: JoinPolicy }[]
   >`
@@ -341,43 +351,58 @@ async function resolveJoinTarget(tx: Tx, entry: JoinEntry): Promise<JoinTarget> 
     WHERE ic.code = ${code} AND ic.revoked_at IS NULL AND ic.expires_at > now()`;
   const invite = rows[0];
   if (!invite) throw invalidCode();
-  if (invite.join_policy === "APPROVAL") {
-    // TODO(4.2): APPROVAL teams' codes create a join request (Flow 4) instead.
-    throw new AppError("APPROVAL_REQUIRED", "This team approves members. Send a join request.");
-  }
   return {
+    via: "code",
     teamId: invite.team_id,
     hackathonId: invite.hackathon_id,
+    joinPolicy: invite.join_policy,
     inviteCodeId: invite.invite_id,
   };
 }
 
 /**
- * Flow 1: join an OPEN team. Both entry points (join from board, invite code) end here — one locking
- * path. Runs inside runMutation (the idempotency claim already ran first).
+ * I7: re-validate a code UNDER the team lock. Revoke/regenerate take the same lock, so once a
+ * revocation commits, the old code can't admit anyone (or create a request).
+ */
+export async function revalidateInviteCode(tx: Tx, inviteCodeId: string): Promise<void> {
+  const valid = await tx.$queryRaw<{ ok: number }[]>`
+    SELECT 1 AS ok FROM invite_codes
+    WHERE id = ${inviteCodeId}::uuid AND revoked_at IS NULL AND expires_at > now()`;
+  if (valid.length === 0) throw invalidCode();
+}
+
+/**
+ * Flow 1: join an OPEN team. Runs inside runMutation (the idempotency claim already ran first).
+ * An APPROVAL team → 409 APPROVAL_REQUIRED (send a request instead, Flow 4).
+ */
+export async function joinTeam(
+  tx: Tx,
+  userId: string,
+  entry: TeamEntry,
+): Promise<TxResult<JoinedTeam>> {
+  const target = await resolveEntryTarget(tx, entry);
+  if (target.joinPolicy !== "OPEN") {
+    throw new AppError("APPROVAL_REQUIRED", "This team approves members. Send a join request.");
+  }
+  return joinResolvedTeam(tx, userId, target);
+}
+
+/**
+ * Flow 1 from the locks on, for an already-resolved OPEN target (redeem resolves once, then
+ * dispatches here or to a request).
  *
  * Locks (I1): my participant row, then the team row. 50 people racing for 1 seat each lock
  * their own participant row (no contention), then queue on the SAME team row: the first reads
  * 3/4 and joins; every later one gets the latest committed row, reads 4/4 → TEAM_FULL.
  */
-export async function joinTeam(
+export async function joinResolvedTeam(
   tx: Tx,
   userId: string,
-  entry: JoinEntry,
+  target: EntryTarget,
 ): Promise<TxResult<JoinedTeam>> {
-  const target = await resolveJoinTarget(tx, entry);
-
   const participant = await lockOwnParticipant(tx, userId, target.hackathonId);
   const team = await lockTeam(tx, target.teamId, "NO KEY UPDATE");
-
-  if (target.inviteCodeId) {
-    // I7: re-validate under the team lock. Revoke/regenerate take the same lock, so once a
-    // revocation commits, this code can't admit anyone.
-    const valid = await tx.$queryRaw<{ ok: number }[]>`
-      SELECT 1 AS ok FROM invite_codes
-      WHERE id = ${target.inviteCodeId}::uuid AND revoked_at IS NULL AND expires_at > now()`;
-    if (valid.length === 0) throw invalidCode();
-  }
+  if (target.inviteCodeId) await revalidateInviteCode(tx, target.inviteCodeId);
 
   // Decisions on mutable state, made only now that the rows are locked (no check-then-act).
   if (participant.teamId) {
@@ -415,7 +440,7 @@ export async function joinTeam(
       teamId: team.id,
       actorUserId: userId,
       metadata: {
-        via: entry.via,
+        via: target.via,
         participantId: participant.id,
         memberCount: updated.memberCount,
         ...(target.inviteCodeId && { inviteCodeId: target.inviteCodeId }),

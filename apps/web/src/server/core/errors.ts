@@ -43,6 +43,13 @@ export const ERROR_CODES = {
 
   // Leaving (step 3.5)
   NOT_A_MEMBER: 409,
+
+  // Join requests (step 4.2)
+  /** The team is OPEN: join directly instead of requesting. */
+  USE_JOIN: 409,
+  REQUEST_ALREADY_PENDING: 409,
+  /** The leader declined an earlier request; no re-request in v1 (R13). */
+  PREVIOUSLY_DECLINED: 409,
 } as const satisfies Record<string, number>;
 
 export type ErrorCode = keyof typeof ERROR_CODES;

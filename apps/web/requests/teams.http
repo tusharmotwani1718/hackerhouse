@@ -115,3 +115,17 @@ GET {{base}}/api/teams/{{teamId}}
 
 ### Hackathon detail: stats { participants, teams, lookingTeams } (lookingTeams = board total)
 GET {{base}}/api/hackathons/{{hackathon}}
+
+# ---------------------------------------------------------------- Step 4.2 — join requests (Flow 4)
+# APPROVAL + PUBLIC teams from the board; INVITE_ONLY ones via their code (redeem, above):
+# redeem answers 200 { outcome: "JOINED", … } for OPEN teams, 201 { outcome: "REQUESTED", request }
+# for APPROVAL teams. OPEN team here → 409 USE_JOIN; again → 409 REQUEST_ALREADY_PENDING;
+# after a leader decline → 409 PREVIOUSLY_DECLINED (R13); full team → 409 TEAM_FULL.
+
+### Request to join → 201 { request: { id, teamId, hackathonId, status: "PENDING", createdAt } }
+POST {{base}}/api/teams/{{teamId}}/requests
+Content-Type: application/json
+Origin: {{origin}}
+Idempotency-Key: {{$guid}}
+
+{}

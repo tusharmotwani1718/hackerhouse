@@ -31,7 +31,7 @@ export type LockedRequest = {
 /** Why a request was cancelled; shown to the requester and kept in the audit log. */
 export type CancelReason = "JOINED_TEAM" | "CREATED_TEAM" | "TEAM_DELETED" | "WITHDREW";
 
-/** The batch of a transaction: `participantId`'s pending requests ∪ `teamId`'s pending requests. */
+/** The batch of a transaction: `participantId`'s pending requests ∪ (union) `teamId`'s pending requests. */
 export async function lockPendingRequests(
   tx: Tx,
   components: { participantId?: string | null; teamId?: string | null },

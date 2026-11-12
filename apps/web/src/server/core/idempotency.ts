@@ -126,19 +126,25 @@ export type MutationOptions = {
 };
 
 /**
+ * What a service returns to runMutation: runTx's `{ value, events? }`, plus an optional success
+ * status for services that only learn inside the transaction which outcome applies (redeem:
+ * 200 JOINED or 201 REQUESTED). It wins over `options.status`.
+ */
+export type MutationResult<T> = TxResult<T> & { status?: number };
+
+/**
  * Run a flow mutation with an idempotency key. The route authenticates and validates first
- * (03 §0.2 a–b); `fn` is the service, unchanged, returning `{ value, events? }`.
+ * (03 §0.2 a–b); `fn` is the service, unchanged, returning `{ value, events?, status? }`.
  *
  *   return runMutation(req, { userId, input, status: 201 }, async (tx) => ({ value: ... }));
  */
 export async function runMutation<T>(
   req: Request,
   options: MutationOptions,
-  fn: (tx: Tx) => Promise<TxResult<T>>,
+  fn: (tx: Tx) => Promise<MutationResult<T>>,
 ): Promise<Response> {
   const key = readIdempotencyKey(req);
   const requestHash = requestFingerprint(req, options.input);
-  const status = options.status ?? 200;
 
   const outcome = await runTx<{ replayed: boolean; status: number; body: unknown }>(
     async (tx) => {
@@ -153,6 +159,7 @@ export async function runMutation<T>(
       }
 
       const result = await fn(tx);
+      const status = result.status ?? options.status ?? 200;
       // Normalize through JSON once (Dates → ISO strings) so the first response and every
       // replay are built from the very same stored value.
       const body = JSON.parse(JSON.stringify({ data: result.value })) as Prisma.InputJsonObject;
