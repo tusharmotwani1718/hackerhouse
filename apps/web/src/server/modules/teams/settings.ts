@@ -226,3 +226,36 @@ export async function revokeInviteCode(
     events: await inviteUpdatedEvents(tx, team.id, { teamId: team.id, active: false }),
   };
 }
+
+// ------------------------------------------------------------------- 9d: view the invite code
+
+export type ActiveInvite = { code: string; expiresAt: Date; createdAt: Date };
+
+/**
+ * 9d: any CURRENT member may see the active code (R26; managing it — 9b/9c — is leader only).
+ * A read: call inside runReadTx (one snapshot), no locks (RD1). If a member is removed a moment
+ * later, they may see it one last time — nothing they couldn't have copied while a member,
+ * which is why a leader who removes someone should regenerate (9b).
+ * Active = unrevoked AND unexpired (DB clock). None → 404 NO_ACTIVE_CODE.
+ */
+export async function getInviteCode(tx: Tx, userId: string, teamId: string): Promise<ActiveInvite> {
+  const team = isUuid(teamId)
+    ? await tx.team.findUnique({ where: { id: teamId }, select: { id: true, hackathonId: true } })
+    : null;
+  if (!team) throw teamNotFound();
+
+  const me = await tx.participant.findUnique({
+    where: { userId_hackathonId: { userId, hackathonId: team.hackathonId } },
+    select: { teamId: true },
+  });
+  if (me?.teamId !== team.id) {
+    throw new AppError("NOT_A_MEMBER", "Only this team's members can see its invite code.");
+  }
+
+  const rows = await tx.$queryRaw<{ code: string; expires_at: Date; created_at: Date }[]>`
+    SELECT code, expires_at, created_at FROM invite_codes
+    WHERE team_id = ${team.id}::uuid AND revoked_at IS NULL AND expires_at > now()`;
+  const active = rows[0];
+  if (!active) throw new AppError("NO_ACTIVE_CODE", "This team has no active invite code.");
+  return { code: active.code, expiresAt: active.expires_at, createdAt: active.created_at };
+}
