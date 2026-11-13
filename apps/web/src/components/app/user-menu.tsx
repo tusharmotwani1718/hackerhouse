@@ -34,6 +34,7 @@ export function UserMenu({
   async function signOut() {
     setSigningOut(true);
     await authClient.signOut();
+    setSigningOut(false);
     router.replace("/");
     router.refresh();
   }
