@@ -7,6 +7,7 @@ import { skillLabel } from "@/lib/skills";
 
 import { InviteCodeBox } from "./invite-code-box";
 import { InviteCodeManager } from "./invite-code-manager";
+import { LeaveTeamButton } from "./leave-team-button";
 import { LookingToggle } from "./looking-toggle";
 import { RemoveMemberButton } from "./remove-member-button";
 import { RequestInbox } from "./request-inbox";
@@ -76,6 +77,18 @@ export function MyTeam({ team }: { team: MyTeamView }) {
             )}
           </div>
         )}
+        <div className="mt-4 flex justify-end border-t pt-3">
+          <LeaveTeamButton
+            teamId={team.id}
+            teamName={team.name}
+            isLeader={team.isLeader}
+            alone={team.members.length === 1}
+            successorName={
+              // Members come in join order: the first other member would lead next (R6).
+              team.members.find((member) => !member.isLeader)?.name ?? null
+            }
+          />
+        </div>
       </section>
 
       {team.inbox && <RequestInbox teamId={team.id} initial={team.inbox} />}
