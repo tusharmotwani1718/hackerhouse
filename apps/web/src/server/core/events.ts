@@ -26,6 +26,17 @@ export interface EventBus {
   publish(events: readonly DomainEvent[]): Promise<void>;
   /** Subscribe a listener (an open stream) to channels; returns the unsubscribe function. */
   subscribe(channels: readonly string[], listener: Listener): () => void;
+  /**
+   * Start receiving now (server startup, instrumentation-node.ts) instead of on the first
+   * subscribe. Never blocks and never throws; safe to call more than once.
+   */
+  start(): void;
+  /**
+   * Resolves once this instance is actually RECEIVING events (Redis: SUBSCRIBE confirmed).
+   * A stream sends `stream.ready` (= "fetch your snapshot now") only after this (6.2 D4):
+   * a snapshot taken while the instance isn't listening could miss a change forever.
+   */
+  ready(): Promise<void>;
 }
 
 /**
@@ -46,6 +57,13 @@ export class InMemoryEventBus implements EventBus {
   // publish within the instance, to its connected streams
   async publish(events: readonly DomainEvent[]): Promise<void> {
     for (const event of events) this.deliver(event);
+  }
+
+  // In-process: nothing to connect, always receiving.
+  start(): void {}
+
+  ready(): Promise<void> {
+    return Promise.resolve();
   }
 
   // subscribe a listener (connected stream) to the list of channels
