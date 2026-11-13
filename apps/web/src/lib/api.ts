@@ -87,6 +87,12 @@ export function friendlyMessage(code: string, serverMessage?: string): string {
       return "This team no longer exists.";
     case "PROFILE_INCOMPLETE":
       return "Complete your profile first: add your GitHub username and at least one skill.";
+    case "REQUEST_NOT_PENDING":
+      return "This request was already decided or cancelled.";
+    case "REQUEST_NOT_FOUND":
+      return "This request no longer exists.";
+    case "NOT_LEADER":
+      return "Only the team's leader can do this.";
     case "RETRY_LATER":
       return "Something went wrong on our side. Please try again in a moment.";
     default:

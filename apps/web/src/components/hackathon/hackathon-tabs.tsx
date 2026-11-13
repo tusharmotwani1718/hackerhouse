@@ -6,12 +6,21 @@ import { usePathname } from "next/navigation";
 import { cn } from "@hacker-house/ui/lib/utils";
 
 /** Tabs of a hackathon: each is its own URL (shareable, back button works). */
-export function HackathonTabs({ slug, action }: { slug: string; action?: React.ReactNode }) {
+export function HackathonTabs({
+  slug,
+  action,
+  teamBadge,
+}: {
+  slug: string;
+  action?: React.ReactNode;
+  /** Pending join requests (leaders of APPROVAL teams), shown on "My team". */
+  teamBadge?: number | null;
+}) {
   const pathname = usePathname();
   const base = `/hackathons/${slug}`;
-  const tabs = [
+  const tabs: { href: string; label: string; badge?: number }[] = [
     { href: base, label: "Teams board" },
-    { href: `${base}/team`, label: "My team" },
+    { href: `${base}/team`, label: "My team", badge: teamBadge ?? 0 },
     { href: `${base}/requests`, label: "My requests" },
   ];
 
@@ -33,6 +42,14 @@ export function HackathonTabs({ slug, action }: { slug: string; action?: React.R
               )}
             >
               {tab.label}
+              {!!tab.badge && (
+                <span
+                  aria-label={`${tab.badge} pending join requests`}
+                  className="ml-1.5 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground tabular-nums"
+                >
+                  {tab.badge}
+                </span>
+              )}
             </Link>
           );
         })}

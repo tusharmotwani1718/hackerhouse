@@ -6,11 +6,15 @@ import { initials } from "@/lib/initials";
 import { skillLabel } from "@/lib/skills";
 
 import { InviteCodeBox } from "./invite-code-box";
+import { RequestInbox } from "./request-inbox";
 import { DATE, type MyTeamView } from "./types";
 
 const LEVEL_DOT = ["", "bg-chart-5", "bg-chart-4", "bg-chart-3", "bg-chart-2", "bg-primary"];
 
-/** "My team" tab content: the team, its invite code (members only), and its members. */
+/**
+ * "My team" tab content: the team, its invite code (members only), the join-request inbox
+ * (leaders of APPROVAL teams), and its members.
+ */
 export function MyTeam({ team }: { team: MyTeamView }) {
   return (
     <div className="grid gap-5">
@@ -65,6 +69,8 @@ export function MyTeam({ team }: { team: MyTeamView }) {
           )}
         </div>
       </section>
+
+      {team.inbox && <RequestInbox teamId={team.id} initial={team.inbox} />}
 
       <section className="rounded-xl bg-card p-5 ring-1 ring-border">
         <h2 className="font-semibold">Members</h2>

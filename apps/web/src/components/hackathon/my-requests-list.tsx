@@ -8,14 +8,8 @@ import { cn } from "@hacker-house/ui/lib/utils";
 
 import { api } from "@/lib/api";
 
+import { REQUEST_STATUS } from "./request-status";
 import { DATE, type MyRequestView } from "./types";
-
-const STATUS: Record<MyRequestView["status"], { label: string; className: string }> = {
-  PENDING: { label: "Pending", className: "bg-chart-5/40 text-accent-foreground" },
-  APPROVED: { label: "Approved", className: "bg-primary text-primary-foreground" },
-  DECLINED: { label: "Declined", className: "bg-destructive/10 text-destructive" },
-  CANCELLED: { label: "Cancelled", className: "bg-muted text-muted-foreground" },
-};
 
 /** What happened, in words (decline reason; cancelled = you joined/created another team). */
 function outcome(request: MyRequestView): string {
@@ -88,7 +82,7 @@ export function MyRequestsList({
     <section aria-label="My join requests">
       <ul className="grid gap-3">
         {requests.map((request) => {
-          const status = STATUS[request.status];
+          const status = REQUEST_STATUS[request.status];
           return (
             <li
               key={request.id}

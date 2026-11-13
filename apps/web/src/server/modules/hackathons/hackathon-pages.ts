@@ -1,21 +1,44 @@
 import "server-only";
 
 import type { BoardViewer } from "@/components/board/types";
-import type { MyRequestView, MyTeamView } from "@/components/hackathon/types";
+import type { InboxRequestView, MyRequestView, MyTeamView } from "@/components/hackathon/types";
 
 import { AppError } from "../../core/errors";
 import type { Tx } from "../../core/tx";
 import { getMyStatus } from "../participants/service";
-import { listMyRequests } from "../requests/reads";
+import { listInbox, listMyRequests, type InboxItem } from "../requests/reads";
 import { getTeamPage } from "../teams/reads";
 import { getInviteCode } from "../teams/settings";
 import { getHackathon, type HackathonDetail } from "./service";
 
 export const MY_REQUESTS_PAGE_SIZE = 20;
+export const INBOX_PAGE_SIZE = 20;
+
+/** An inbox row for the client (dates as ISO strings). */
+export function toInboxView(item: InboxItem): InboxRequestView {
+  return {
+    id: item.id,
+    status: item.status,
+    declineReason: item.declineReason,
+    createdAt: item.createdAt.toISOString(),
+    decidedAt: item.decidedAt?.toISOString() ?? null,
+    requester: {
+      name: item.requester.name,
+      githubUsername: item.requester.githubUsername,
+      portfolioUrl: item.requester.portfolioUrl,
+      timezone: item.requester.timezone,
+      skills: item.requester.skills,
+    },
+  };
+}
 
 export type HackathonShell = {
   hackathon: HackathonDetail;
-  viewer: BoardViewer & { isLeader: boolean };
+  viewer: BoardViewer & {
+    isLeader: boolean;
+    /** Leaders of APPROVAL teams: requests waiting for a decision (shown on the My team tab). */
+    pendingInbox: number | null;
+  };
 };
 
 /**
@@ -29,6 +52,20 @@ export async function loadHackathonShell(
 ): Promise<HackathonShell> {
   const hackathon = await getHackathon(tx, idOrSlug);
   const me = await getMyStatus(tx, userId, hackathon.id);
+  // Only leaders of APPROVAL teams have an inbox (OPEN teams can't receive requests; the policy
+  // never changes). One indexed count: (team_id, status, created_at, id).
+  let pendingInbox: number | null = null;
+  if (me.team?.isLeader) {
+    const team = await tx.team.findUnique({
+      where: { id: me.team.id },
+      select: { joinPolicy: true },
+    });
+    if (team?.joinPolicy === "APPROVAL") {
+      pendingInbox = await tx.joinRequest.count({
+        where: { teamId: me.team.id, status: "PENDING" },
+      });
+    }
+  }
   return {
     hackathon,
     viewer: {
@@ -36,6 +73,7 @@ export async function loadHackathonShell(
       team: me.team ? { id: me.team.id, name: me.team.name } : null,
       isLeader: me.team?.isLeader ?? false,
       pendingTeamIds: [], // only the board needs these (board-page.ts)
+      pendingInbox,
     },
   };
 }
@@ -63,6 +101,12 @@ export async function loadMyTeam(
   }
 
   const { team } = page;
+  // The leader's inbox (APPROVAL teams only): first page of PENDING, oldest first. The other
+  // statuses are fetched from the API when the leader switches to them.
+  const inbox =
+    page.viewer.isLeader && team.joinPolicy === "APPROVAL"
+      ? await listInbox(tx, userId, team.id, { status: "PENDING", limit: INBOX_PAGE_SIZE })
+      : null;
   return {
     registered: true,
     team: {
@@ -87,6 +131,13 @@ export async function loadMyTeam(
         isLeader: member.isLeader,
       })),
       invite,
+      inbox: inbox
+        ? {
+            requests: inbox.requests.map(toInboxView),
+            totalCount: inbox.totalCount,
+            nextCursor: inbox.nextCursor,
+          }
+        : null,
     },
   };
 }

@@ -51,6 +51,8 @@ export type InboxItem = {
     githubUsername: string | null;
     githubVerified: false;
     portfolioUrl: string | null;
+    /** IANA zone: helps the leader judge overlapping working hours (UI, step 9). */
+    timezone: string;
     skills: Partial<Record<Skill, number>>;
   };
 };
@@ -115,6 +117,7 @@ export async function listInbox(
           name: true,
           githubUsername: true,
           portfolioUrl: true,
+          timezone: true,
           skills: { select: { skill: true, level: true }, orderBy: { skill: "asc" } },
         },
       },
@@ -137,6 +140,7 @@ export async function listInbox(
           githubUsername: p.user.githubUsername,
           githubVerified: false,
           portfolioUrl: p.user.portfolioUrl,
+          timezone: p.user.timezone,
           skills: Object.fromEntries(p.user.skills.map((s) => [s.skill, s.level])),
         },
       };

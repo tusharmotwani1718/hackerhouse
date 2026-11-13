@@ -49,6 +49,7 @@ async function HackathonShell({ params }: Pick<LayoutProps<"/hackathons/[slug]">
       <HackathonHeader hackathon={hackathon} viewer={viewer} />
       <HackathonTabs
         slug={hackathon.slug}
+        teamBadge={viewer.pendingInbox}
         action={<CreateTeamDialog slug={hackathon.slug} disabledReason={disabledReason} />}
       />
     </>
