@@ -58,6 +58,28 @@ const schema = z
       .min(1, { error: "is required", abort: true })
       .min(32, { error: "must be at least 32 characters (generate: openssl rand -base64 32)" }),
     BETTER_AUTH_URL: urlWithProtocol(["http:", "https:"]),
+
+    // Real-time events (step 6.1). `memory` = one process only (tests / single instance);
+    // `redis` = Redis pub/sub between instances. The channel name separates apps sharing one
+    // Redis (pub/sub ignores Redis's numbered databases): e.g. tests use hh:events:test.
+    EVENT_BUS: z.preprocess(
+      (value) => (value === "" ? undefined : value),
+      z.enum(["redis", "memory"]).default("redis"),
+    ),
+    // Dev probes (/api/dev/*) are on outside production; this turns them on IN a production
+    // build too — for test harnesses only (e.g. the 6.1 two-instance check). Never in a deploy.
+    ENABLE_DEV_PROBES: z.preprocess(
+      (value) =>
+        value === "" || value === undefined ? undefined : value === "1" || value === "true",
+      z.boolean().default(false),
+    ),
+    EVENTS_CHANNEL: z.preprocess(
+      (value) => (value === "" ? undefined : value),
+      z
+        .string()
+        .regex(/^[A-Za-z0-9:._-]{1,100}$/, { error: "may contain letters, digits and : . _ -" })
+        .default("hh:events"),
+    ),
   })
   // lock_timeout must fire first: it is the only one that frees a connection blocked inside
   // Postgres, and it yields a clean 55P03 instead of an "expired transaction" error.

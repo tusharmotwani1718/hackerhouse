@@ -5,7 +5,8 @@ import { Prisma } from "@hacker-house/db";
 import { getDb } from "../db";
 import { getEnv } from "../env";
 import { retryLater } from "./errors";
-import { getEventPublisher, type DomainEvent } from "./events";
+import { getEventBus } from "./bus";
+import type { DomainEvent } from "./events";
 import { logger } from "./logger";
 import { mapDbError, RetryableTxError, type ConstraintErrors } from "./pg-errors";
 
@@ -58,14 +59,22 @@ export async function runTx<T>(
       throw mapped;
     }
 
-    // Committed. Publishing must not fail the request: the change is already durable and
-    // events are only hints (clients resync), so a publish failure is logged, not thrown.
+    // Committed. Publishing must neither fail nor DELAY the request (6.1 D5): the change is
+    // durable and events are only hints (clients resync), so it runs in the background and a
+    // failure is logged. When Redis is down, PUBLISH fails at once (offline queue disabled).
+    // Order is kept: this instance's publishes go down one Redis connection in call order.
     if (result.events?.length) {
-      try {
-        await getEventPublisher().publish(result.events);
-      } catch (error) {
-        logger.error("event publish failed after commit", { err: error });
-      }
+      const events = result.events;
+      void getEventBus()
+        .publish(events)
+        .then(
+          () => logger.debug("events published", { count: events.length }),
+          (error: unknown) =>
+            logger.warn("event publish failed after commit (clients will resync)", {
+              err: error,
+              types: events.map((event) => event.type),
+            }),
+        );
     }
     return result.value;
   }

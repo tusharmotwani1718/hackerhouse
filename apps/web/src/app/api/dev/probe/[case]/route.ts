@@ -200,7 +200,7 @@ async function runCase(name: (typeof CASES)[number], req: Request): Promise<Resp
 }
 
 const handler = route(async (req: Request, ctx: RouteContext<"/api/dev/probe/[case]">) => {
-  if (getEnv().NODE_ENV === "production") {
+  if (getEnv().NODE_ENV === "production" && !getEnv().ENABLE_DEV_PROBES) {
     throw new AppError("NOT_FOUND", `No endpoint ${req.method} ${new URL(req.url).pathname}.`);
   }
   const { case: name } = await parseParams(ctx.params, paramsSchema);
