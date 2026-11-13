@@ -2,6 +2,11 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* Tailwind v4 only scans the app being built: also scan the apps and this package's own
+   components, so classes used inside packages/ui are generated too. */
+@source "../../../apps/**/*.{ts,tsx}";
+@source "../**/*.{ts,tsx}";
+
 
 :root {
   --background: oklch(0.9930 0.0017 145.5624);

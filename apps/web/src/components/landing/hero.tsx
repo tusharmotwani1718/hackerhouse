@@ -1,8 +1,9 @@
-import { Sparkles } from "lucide-react";
 import Link from "next/link";
 import type { CSSProperties } from "react";
 
 import { Button } from "@hacker-house/ui/components/button";
+
+import { Logo } from "@/components/brand/logo";
 
 import { FeatureCard, type FeatureCardProps } from "./feature-card";
 
@@ -68,14 +69,11 @@ const bottomStrip: CSSProperties = {
 export function Hero() {
   return (
     <section className="">
-      <div className="relative isolate mx-auto overflow-hidden rounded-[2rem] bg-card ring-1 ring-border/70">
+      <div className="relative isolate mx-auto overflow-hidden bg-card ring-1 ring-border/70">
         <div aria-hidden className="absolute inset-0 -z-10" style={glow} />
 
         <header className="flex items-center justify-between px-5 py-5 sm:px-10">
-          <Link href="/" className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-            <Sparkles className="size-4 text-primary" aria-hidden />
-            Hacker House
-          </Link>
+          <Logo />
           <nav className="flex items-center gap-2">
             <Button
               variant="outline"
@@ -96,7 +94,7 @@ export function Hero() {
         </header>
 
         <div className="px-6 pt-16 pb-12 text-center sm:pt-24 sm:pb-14">
-          <h1 className="mx-auto max-w-5xl text-[2.6rem] leading-[1.04] font-medium tracking-tighter text-balance sm:text-6xl lg:text-7xl">
+          <h1 className="mx-auto max-w-5xl text-[2.6rem] leading-[1.04] font-normal opacity-85 tracking-tighter text-balance sm:text-6xl lg:text-7xl">
             Find your next hackathon team in minutes
           </h1>
           <p className="mx-auto mt-6 max-w-3xl text-base text-balance text-muted-foreground sm:text-lg">
