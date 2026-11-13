@@ -13,9 +13,12 @@ export function AppHeader() {
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
         <div className="flex items-center gap-8">
           <Logo />
-          <nav className="hidden sm:block">
+          <nav className="hidden items-center gap-6 sm:flex">
             <Link href="/hackathons" className="text-sm font-medium text-foreground">
               Hackathons
+            </Link>
+            <Link href="/profile" className="text-sm font-medium text-foreground">
+              Profile
             </Link>
           </nav>
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, LogOut } from "lucide-react";
+import { ChevronDown, LogOut, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -60,6 +60,10 @@ export function UserMenu({
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => router.push("/profile")}>
+          <UserRound aria-hidden />
+          My profile
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={signOut} disabled={signingOut}>
           <LogOut aria-hidden />
           {signingOut ? "Signing out…" : "Sign out"}

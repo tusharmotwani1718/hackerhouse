@@ -4,7 +4,14 @@
  * action, so a retried click can't do the action twice (step 3.2).
  */
 export type ApiSuccess<T> = { ok: true; status: number; data: T; nextCursor?: string | null };
-export type ApiFailure = { ok: false; status: number; code: string; message: string };
+export type ApiFailure = {
+  ok: false;
+  status: number;
+  code: string;
+  message: string;
+  /** VALIDATION_FAILED: [{ path, message }] per invalid field. */
+  details?: unknown;
+};
 export type ApiResult<T> = ApiSuccess<T> | ApiFailure;
 
 export async function api<T>(
@@ -33,7 +40,7 @@ export async function api<T>(
   const json = (await response.json().catch(() => null)) as {
     data?: T;
     nextCursor?: string | null;
-    error?: { code?: string; message?: string };
+    error?: { code?: string; message?: string; details?: unknown };
   } | null;
   if (response.ok) {
     return {
@@ -49,6 +56,7 @@ export async function api<T>(
     status: response.status,
     code,
     message: friendlyMessage(code, json?.error?.message),
+    details: json?.error?.details,
   };
 }
 

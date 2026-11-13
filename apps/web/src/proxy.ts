@@ -16,5 +16,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/hackathons/:path*"],
+  matcher: ["/hackathons/:path*", "/profile"],
 };
