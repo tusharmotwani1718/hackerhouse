@@ -25,7 +25,7 @@ loadRootEnv();
 
 const nextConfig: NextConfig = {
   // Workspace packages ship TypeScript source (no build step).
-  transpilePackages: ["@hacker-house/db"],
+  transpilePackages: ["@hacker-house/db", "@hacker-house/ui"],
   cacheComponents: true,
   partialPrefetching: true,
 };

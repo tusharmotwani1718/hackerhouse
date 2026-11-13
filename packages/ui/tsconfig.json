@@ -1,0 +1,10 @@
+{
+  "extends": "@hacker-house/typescript-config/react-library.json",
+  "compilerOptions": {
+    "paths": {
+      "@hacker-house/ui/*": ["./src/*"]
+    }
+  },
+  "include": ["src"],
+  "exclude": ["node_modules"]
+}

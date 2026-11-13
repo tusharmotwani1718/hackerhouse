@@ -2,7 +2,8 @@
   "extends": "@hacker-house/typescript-config/nextjs.json",
   "compilerOptions": {
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@hacker-house/ui/*": ["../../packages/ui/src/*"]
     },
     "types": ["bun"]
   },
