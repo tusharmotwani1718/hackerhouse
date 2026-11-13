@@ -57,8 +57,6 @@ export type EventStreamOptions = {
   retryMs: number;
   /** Max bytes queued for a client that isn't reading (D6). */
   bufferBytes: number;
-  /** Called on every heartbeat that was written (the slot refresh, D8). */
-  onHeartbeat?: () => void;
   /** Called exactly once, whatever ended the stream (D7). */
   onClose: (summary: StreamSummary) => void;
 };
@@ -80,7 +78,7 @@ export function openEventStream(options: EventStreamOptions): ReadableStream<Uin
 
   /**
    * The ONE way a stream ends (D7). Idempotent: abort and cancel usually both fire for one
-   * disconnect, and the slot must be released exactly once.
+   * disconnect, and cleanup (unsubscribe, onClose) must run exactly once.
    */
   function close(reason: CloseReason): void {
     if (closed) return;
@@ -162,7 +160,6 @@ export function openEventStream(options: EventStreamOptions): ReadableStream<Uin
 
         heartbeat = setInterval(() => {
           write(": hb\n\n");
-          if (!closed) options.onHeartbeat?.();
         }, options.heartbeatMs);
 
         lifetime = setTimeout(() => {

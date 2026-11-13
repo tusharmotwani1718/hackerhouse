@@ -22,15 +22,17 @@ export type AuthSession = {
 
 /**
  * The user budget a request counts against (06 §4, step 7.2): one per request, never stacked.
- * `none` = the route enforces its own rules (redeem, the live stream) — an explicit opt-out.
+ * `stream` = live-stream connects (7.4). `none` = the route enforces its own rules (redeem) — an
+ * explicit opt-out.
  */
-export type LimitGroup = "read" | "mutation" | "request" | "suggestion" | "none";
+export type LimitGroup = "read" | "mutation" | "request" | "suggestion" | "stream" | "none";
 
 const GROUP_RULES: Record<Exclude<LimitGroup, "none">, RateLimitRuleName> = {
   read: "read.user",
   mutation: "mutation.user",
   request: "request.user",
   suggestion: "suggestion.user",
+  stream: "stream.connect.user", // per user stream connection limit
 };
 
 export type RequireUserOptions = {

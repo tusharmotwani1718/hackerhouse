@@ -5,7 +5,7 @@ import { ErrorReply } from "redis";
 import { getRequestContext } from "../core/context";
 import { AppError } from "../core/errors";
 import { logger } from "../core/logger";
-import { getRedis } from "../core/redis";
+import { getRedis, RedisTimeoutError, withRedisTimeout } from "../core/redis";
 import { getEnv } from "../env";
 import { MemorySlidingWindow, type MemoryCheck } from "./memory";
 import {
@@ -20,35 +20,11 @@ import { toDecision, type WindowDecision } from "./sliding-window";
 export type LimitCheck = { rule: RateLimitRuleName; subject: string };
 
 /**
- * A healthy Redis answers in ~1 ms. A HUNG one (connected, not answering) must not make requests
- * hang. Our own timer — node-redis's `timeout` command option only covers the time BEFORE a
- * command is written to the socket (6.3.1 drops the timer once it is sent), and with a hung Redis
- * the socket is still up, so commands are sent at once and then wait for a reply forever.
- */
-const REDIS_TIMEOUT_MS = 100;
-
-/**
  * redis = normal; memory = Redis unreachable, in-memory limits; slow = Redis didn't answer in
  * time (503 or unchecked, per rule). Only used to log each CHANGE once (not every request).
  */
 type LimiterMode = "redis" | "memory" | "slow";
 type LimiterState = { memory: MemorySlidingWindow; mode: LimiterMode };
-
-class RedisTimeoutError extends Error {
-  override readonly name = "RedisTimeoutError";
-}
-
-/** Reject after `ms`. The late reply (if any) is ignored; race() handles its rejection too. */
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const expired = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new RedisTimeoutError(`Redis did not answer within ${ms} ms`)),
-      ms,
-    );
-  });
-  return Promise.race([promise, expired]).finally(() => clearTimeout(timer));
-}
 
 function switchMode(s: LimiterState, mode: LimiterMode, err?: unknown): void {
   if (s.mode === mode) return;
@@ -128,7 +104,7 @@ export async function enforceLimits(checks: readonly LimitCheck[]): Promise<void
  * Redis first (one budget across all instances). If it can't answer (D4, revised after testing):
  *  - UNREACHABLE (disconnected: the command fails at once) → this instance's memory, the same
  *    algorithm; limits become per instance until Redis is back (06 §6).
- *  - TOO SLOW (no answer within REDIS_TIMEOUT_MS) → per rule (7.2 D4): any `reject` rule →
+ *  - TOO SLOW (no answer within REDIS_TIMEOUT_MS, core/redis.ts) → per rule (7.2 D4): any `reject` rule →
  *    503 RETRY_LATER; all `allow` → null = let the request through unchecked.
  *    Never memory here: the timer runs on our own (single) thread, so under load it also fires
  *    when Redis answered but we hadn't processed the reply yet — falling back to fresh in-memory
@@ -140,12 +116,11 @@ async function decide(
 ): Promise<WindowDecision | null> {
   const s = state();
   try {
-    const reply = await withTimeout(
+    const reply = await withRedisTimeout(
       getRedis().slidingWindow(
         checks.map((check) => check.key),
         checks.flatMap((check) => [String(check.limit), String(check.windowMs)]),
       ),
-      REDIS_TIMEOUT_MS,
     );
     switchMode(s, "redis");
     return toDecision(reply);

@@ -37,7 +37,7 @@ export const RATE_LIMIT_RULES = {
   "mutation.user": { limit: 60, windowMs: MINUTE, onTimeout: "allow" },
   "suggestion.user": { limit: 20, windowMs: MINUTE, onTimeout: "allow" },
   "read.user": { limit: 300, windowMs: MINUTE, onTimeout: "allow" },
-  // Live stream connects (step 7.4); the concurrent cap is separate (stream-slots.ts).
+  // Live stream connects (step 7.4). No cap on CONCURRENT streams in v1 (removed for simplicity).
   "stream.connect.user": { limit: 20, windowMs: MINUTE, onTimeout: "allow" },
 } as const satisfies Record<string, RuleConfig>;
 

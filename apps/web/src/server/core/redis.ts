@@ -49,3 +49,29 @@ export function getRedis(): RedisClient {
   }
   return g.__hhRedis;
 }
+
+/**
+ * How long a request waits for Redis before treating it as unavailable (7.1 D4). A healthy Redis
+ * answers in ~1 ms. Our own timer: node-redis's `timeout` command option only covers the time
+ * BEFORE a command is written to the socket (6.3.1 drops the timer once it is sent), and with a
+ * hung-but-connected Redis commands are sent at once and then wait for a reply forever.
+ * Note: the timer runs on our own (single) thread, so on a busy instance it can also fire while
+ * Redis answered but the reply wasn't processed yet — callers must treat it as "unknown".
+ */
+export const REDIS_TIMEOUT_MS = 100;
+
+export class RedisTimeoutError extends Error {
+  override readonly name = "RedisTimeoutError";
+}
+
+/** Reject after `ms`. The late reply (if any) is ignored; race() handles its rejection too. */
+export function withRedisTimeout<T>(promise: Promise<T>, ms = REDIS_TIMEOUT_MS): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new RedisTimeoutError(`Redis did not answer within ${ms} ms`)),
+      ms,
+    );
+  });
+  return Promise.race([promise, expired]).finally(() => clearTimeout(timer));
+}

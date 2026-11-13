@@ -71,10 +71,6 @@ export const ERROR_CODES = {
    * unlike NOT_A_MEMBER (409), which means "you can't leave/be removed from a team you're not in".
    */
   MEMBERS_ONLY: 403,
-
-  // Live stream (step 6.2)
-  /** The user already has SSE_MAX_STREAMS_PER_USER open streams (06 §3: max 5 tabs). */
-  TOO_MANY_STREAMS: 429,
 } as const satisfies Record<string, number>;
 
 export type ErrorCode = keyof typeof ERROR_CODES;

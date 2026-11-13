@@ -126,8 +126,6 @@ const schema = z
     SSE_HEARTBEAT_MS: intWithDefault(25_000, 1_000, 120_000),
     /** Base stream lifetime; each stream gets a random lifetime in [base, base × 4/3] (D5). */
     SSE_MAX_LIFETIME_MS: intWithDefault(2_700_000, 5_000, 86_400_000),
-    /** Concurrent streams per user (06 §3), per instance until Phase 7 (D8). */
-    SSE_MAX_STREAMS_PER_USER: intWithDefault(5, 1, 100),
     /** Bytes a stream may queue for a client that isn't reading before it is cut off (D6). */
     SSE_BUFFER_BYTES: intWithDefault(262_144, 1_024, 16_777_216),
 
