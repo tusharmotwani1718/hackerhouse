@@ -1,0 +1,25 @@
+# Step 8.1 — teammate suggestions. Run `bun run dev`; VS Code "REST Client" keeps cookies.
+@base = http://localhost:3000
+@origin = http://localhost:3000
+@teamId = REPLACE_WITH_A_TEAM_ID
+
+### Sign in as the team's LEADER
+POST {{base}}/api/auth/sign-in/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{ "email": "pat@example.com", "password": "REPLACE_ME" }
+
+### Suggestions for the team's open seats: unteamed participants of the same hackathon, best
+### first. { data: { method, team: { id, skillProfile, timezone: "UTC+05:30" }, suggestions: [
+### { participant: { id, name, githubUsername, githubVerified: false, portfolioUrl }, score,
+###   breakdown: { skills: [{ skill, teamLevel, candidateLevel, gain, reason }], skillGain,
+###   timezone: { team, candidate, overlapHours, factor }, formula }, hasRequestedYourTeam }] } }
+### Candidates who add nothing are included (score 0, ranked last).
+GET {{base}}/api/teams/{{teamId}}/suggestions
+
+### Fewer results (limit 1-50, default 20)
+GET {{base}}/api/teams/{{teamId}}/suggestions?limit=5
+
+### Not the leader → 403 NOT_LEADER; full team → 409 TEAM_FULL; unknown team → 404 TEAM_NOT_FOUND;
+### limit 0 / 51 / text → 400. Rate limit: 20 calls / min per user.
