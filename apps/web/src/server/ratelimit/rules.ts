@@ -22,7 +22,7 @@ type RuleConfig = RateLimitRule & { onTimeout: TimeoutPolicy };
 const MINUTE = 60_000;
 
 export const RATE_LIMIT_RULES = {
-  // Sign-in (step 7.3): (email, IP) → one account from one place; email → one account from
+  // Sign-in (step 7.3; the email is hashed in the key): (email, IP) → one account from one place; email → one account from
   // anywhere (looser on purpose: a strict one lets an attacker lock a victim out); IP → stuffing.
   "signin.email_ip": { limit: 5, windowMs: 15 * MINUTE, onTimeout: "reject" },
   "signin.email": { limit: 20, windowMs: 15 * MINUTE, onTimeout: "reject" },

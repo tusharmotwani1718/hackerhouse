@@ -27,6 +27,7 @@ const DISABLED_PATHS = [
   "/verify-email",
   "/update-session",
   "/verify-password",
+  "/change-password", // not needed in v1 (decided in step 7.3: would need its own rate limit)
   "/sign-in/social", // GitHub OAuth comes later
   "/link-social",
   "/unlink-account",
