@@ -89,7 +89,7 @@ export function HackathonHeader({ hackathon, viewer }: Props) {
             <>
               <p className="font-medium">You&apos;re registered</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Not in a team yet: join one below.
+                Not in a team yet: join one on the board or create your own.
               </p>
             </>
           )}
