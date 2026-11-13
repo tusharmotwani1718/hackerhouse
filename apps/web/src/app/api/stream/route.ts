@@ -28,7 +28,9 @@ const RETRY_MAX_MS = 10_000;
 const randomBetween = (min: number, max: number) => Math.round(min + Math.random() * (max - min));
 
 export const GET = route(async (req: Request) => {
-  const { user } = await requireUser(req);
+  // Own limits: the concurrent cap below (+ 20 connects/min in step 7.4), not the read budget —
+  // a stream is one long request, and reconnect storms are what 7.4 limits.
+  const { user } = await requireUser(req, { limit: "none" });
   const { hackathonId } = parseQuery(req, querySchema);
 
   const channels = [`user:${user.id}`];

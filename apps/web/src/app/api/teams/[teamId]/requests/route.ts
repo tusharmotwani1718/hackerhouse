@@ -32,7 +32,8 @@ export const GET = route(
 
 export const POST = route(
   async (req: Request, ctx: RouteContext<"/api/teams/[teamId]/requests">) => {
-    const { user } = await requireUser(req);
+    // Its own budget (06 §4: 20/min, spam), not the general mutation one.
+    const { user } = await requireUser(req, { limit: "request" });
     const { teamId } = await parseParams(ctx.params, paramsSchema);
     const input = await parseJson(req, emptyBodySchema);
     return runMutation(

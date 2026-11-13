@@ -23,7 +23,8 @@ const redeemSchema = z.strictObject({
 });
 
 export const POST = route(async (req: Request) => {
-  const { user } = await requireUser(req);
+  // Only the redeem rules (7.2 D2), not the general mutation budget as well.
+  const { user } = await requireUser(req, { limit: "none" });
   await enforceLimits([
     { rule: "redeem.user", subject: user.id },
     { rule: "redeem.ip", subject: clientIp(req) },

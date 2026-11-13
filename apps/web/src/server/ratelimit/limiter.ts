@@ -8,7 +8,12 @@ import { logger } from "../core/logger";
 import { getRedis } from "../core/redis";
 import { getEnv } from "../env";
 import { MemorySlidingWindow, type MemoryCheck } from "./memory";
-import { RATE_LIMIT_RULES, type RateLimitRule, type RateLimitRuleName } from "./rules";
+import {
+  RATE_LIMIT_RULES,
+  type RateLimitRule,
+  type RateLimitRuleName,
+  type TimeoutPolicy,
+} from "./rules";
 import { toDecision, type WindowDecision } from "./sliding-window";
 
 /** One limit to check: a rule from rules.ts + whose budget (a user id, an IP, …). */
@@ -24,7 +29,7 @@ const REDIS_TIMEOUT_MS = 100;
 
 /**
  * redis = normal; memory = Redis unreachable, in-memory limits; slow = Redis didn't answer in
- * time, requests rejected. Only used to log each CHANGE once (not every request).
+ * time (503 or unchecked, per rule). Only used to log each CHANGE once (not every request).
  */
 type LimiterMode = "redis" | "memory" | "slow";
 type LimiterState = { memory: MemorySlidingWindow; mode: LimiterMode };
@@ -53,7 +58,10 @@ function switchMode(s: LimiterState, mode: LimiterMode, err?: unknown): void {
     logger.warn("rate limiter: Redis unreachable, using in-memory limits (per instance)", { err });
   }
   if (mode === "slow") {
-    logger.warn("rate limiter: Redis too slow, rejecting limited requests (503)", { err });
+    logger.warn(
+      "rate limiter: Redis too slow; security limits answer 503, budget limits let requests through",
+      { err },
+    );
   }
 }
 
@@ -62,9 +70,9 @@ const g = globalThis as unknown as { __hhRateLimit?: LimiterState };
 const state = (): LimiterState =>
   (g.__hhRateLimit ??= { memory: new MemorySlidingWindow(), mode: "redis" });
 
-/** The rule's limit after RATE_LIMIT_OVERRIDES. */
-export function ruleOf(name: RateLimitRuleName): RateLimitRule {
-  return getEnv().RATE_LIMIT_OVERRIDES[name] ?? RATE_LIMIT_RULES[name];
+/** The rule after RATE_LIMIT_OVERRIDES (an override changes limit/window, not the policy). */
+export function ruleOf(name: RateLimitRuleName): RateLimitRule & { onTimeout: TimeoutPolicy } {
+  return { ...RATE_LIMIT_RULES[name], ...getEnv().RATE_LIMIT_OVERRIDES[name] };
 }
 
 /**
@@ -79,6 +87,7 @@ export function clientIp(req: Request): string {
 
 /**
  * Count this request against every check, ALL OR NOTHING (D2), or throw 429 RATE_LIMITED.
+ * Most endpoints don't call this directly: requireUser() does, with the request's budget (7.2).
  * Call it after auth (user keys need the user) and before validation/the transaction (D9), so a
  * limited request costs no Postgres work. The decision is stored in the request context and
  * route() adds `RateLimit-Limit/-Remaining/-Reset` for the tightest rule (D6).
@@ -89,6 +98,8 @@ export async function enforceLimits(checks: readonly LimitCheck[]): Promise<void
     return { name: check.rule, key: `rl:${check.rule}:${check.subject}`, ...rule };
   });
   const decision = await decide(resolved);
+  // Redis too slow and every rule is a budget limit: let it through unchecked (no headers).
+  if (!decision) return;
   const retryAfterSeconds = Math.ceil(decision.retryAfterMs / 1000);
 
   const context = getRequestContext();
@@ -117,13 +128,16 @@ export async function enforceLimits(checks: readonly LimitCheck[]): Promise<void
  * Redis first (one budget across all instances). If it can't answer (D4, revised after testing):
  *  - UNREACHABLE (disconnected: the command fails at once) → this instance's memory, the same
  *    algorithm; limits become per instance until Redis is back (06 §6).
- *  - TOO SLOW (no answer within REDIS_TIMEOUT_MS) → reject the request with 503 RETRY_LATER.
- *    Not memory: the timer runs on our own (single) thread, so under load it also fires when
- *    Redis answered but we hadn't processed the reply yet — falling back to fresh in-memory
+ *  - TOO SLOW (no answer within REDIS_TIMEOUT_MS) → per rule (7.2 D4): any `reject` rule →
+ *    503 RETRY_LATER; all `allow` → null = let the request through unchecked.
+ *    Never memory here: the timer runs on our own (single) thread, so under load it also fires
+ *    when Redis answered but we hadn't processed the reply yet — falling back to fresh in-memory
  *    counters then let extra requests through (a 50-request burst passed 6 of a limit of 3).
- *    The late script may still run in Redis: the rejected attempt is then counted (stricter).
+ *    The late script may still run in Redis: that attempt is then counted anyway.
  */
-async function decide(checks: readonly MemoryCheck[]): Promise<WindowDecision> {
+async function decide(
+  checks: readonly (MemoryCheck & { onTimeout: TimeoutPolicy })[],
+): Promise<WindowDecision | null> {
   const s = state();
   try {
     const reply = await withTimeout(
@@ -138,6 +152,7 @@ async function decide(checks: readonly MemoryCheck[]): Promise<WindowDecision> {
   } catch (err) {
     if (err instanceof RedisTimeoutError) {
       switchMode(s, "slow", err);
+      if (checks.every((check) => check.onTimeout === "allow")) return null;
       throw new AppError("RETRY_LATER", "Please try again in a moment.", {
         headers: { "Retry-After": "1" },
         cause: err,
