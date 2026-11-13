@@ -12,6 +12,8 @@ export type MyTeamView = {
   seatsLeft: number;
   /** Shown on the board (looking for members and not full). */
   listed: boolean;
+  /** The leader's "looking for members" switch (listed = looking AND not full). */
+  isLooking: boolean;
   isLeader: boolean;
   createdAt: string;
   members: {

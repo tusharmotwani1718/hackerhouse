@@ -6,6 +6,9 @@ import { initials } from "@/lib/initials";
 import { skillLabel } from "@/lib/skills";
 
 import { InviteCodeBox } from "./invite-code-box";
+import { InviteCodeManager } from "./invite-code-manager";
+import { LookingToggle } from "./looking-toggle";
+import { RemoveMemberButton } from "./remove-member-button";
 import { RequestInbox } from "./request-inbox";
 import { DATE, type MyTeamView } from "./types";
 
@@ -13,7 +16,8 @@ const LEVEL_DOT = ["", "bg-chart-5", "bg-chart-4", "bg-chart-3", "bg-chart-2", "
 
 /**
  * "My team" tab content: the team, its invite code (members only), the join-request inbox
- * (leaders of APPROVAL teams), and its members.
+ * (leaders of APPROVAL teams), and its members. The leader also gets the tools: the "looking
+ * for members" switch, new/revoke invite code, and removing members.
  */
 export function MyTeam({ team }: { team: MyTeamView }) {
   return (
@@ -56,18 +60,22 @@ export function MyTeam({ team }: { team: MyTeamView }) {
         <p className="mt-4 text-sm text-muted-foreground">
           {team.description.trim() || "No description yet."}
         </p>
-        <div className="mt-4">
-          {team.invite ? (
-            <InviteCodeBox code={team.invite.code} expiresAt={team.invite.expiresAt} />
-          ) : (
-            <p className="rounded-lg border border-dashed px-4 py-3 text-sm text-muted-foreground">
-              No active invite code
-              {team.isLeader
-                ? ": you can create a new one from the team settings (coming soon)."
-                : "."}
-            </p>
-          )}
-        </div>
+        {team.isLeader ? (
+          <div className="mt-4 grid gap-3">
+            <LookingToggle teamId={team.id} isLooking={team.isLooking} seatsLeft={team.seatsLeft} />
+            <InviteCodeManager teamId={team.id} invite={team.invite} />
+          </div>
+        ) : (
+          <div className="mt-4">
+            {team.invite ? (
+              <InviteCodeBox code={team.invite.code} expiresAt={team.invite.expiresAt} />
+            ) : (
+              <p className="rounded-lg border border-dashed px-4 py-3 text-sm text-muted-foreground">
+                No active invite code: ask your team leader for a new one.
+              </p>
+            )}
+          </div>
+        )}
       </section>
 
       {team.inbox && <RequestInbox teamId={team.id} initial={team.inbox} />}
@@ -138,6 +146,13 @@ export function MyTeam({ team }: { team: MyTeamView }) {
                     </div>
                   )}
                 </div>
+                {team.isLeader && !member.isLeader && (
+                  <RemoveMemberButton
+                    teamId={team.id}
+                    participantId={member.participantId}
+                    name={member.name}
+                  />
+                )}
               </li>
             );
           })}

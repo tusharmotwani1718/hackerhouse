@@ -101,6 +101,8 @@ export async function loadMyTeam(
   }
 
   const { team } = page;
+  // The card has `listed` (looking AND not full); the leader's switch needs the flag itself.
+  const flags = await tx.team.findUnique({ where: { id: team.id }, select: { isLooking: true } });
   // The leader's inbox (APPROVAL teams only): first page of PENDING, oldest first. The other
   // statuses are fetched from the API when the leader switches to them.
   const inbox =
@@ -119,6 +121,7 @@ export async function loadMyTeam(
       maxSize: team.maxSize,
       seatsLeft: team.seatsLeft,
       listed: team.listed,
+      isLooking: flags?.isLooking ?? false,
       isLeader: page.viewer.isLeader,
       createdAt: team.createdAt.toISOString(),
       members: page.members.map((member) => ({
