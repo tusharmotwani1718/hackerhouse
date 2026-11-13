@@ -4,7 +4,8 @@
 //   OPEN     → join (Flow 1):    200 { outcome: "JOINED", team, joinedAt }
 //   APPROVAL → request (Flow 4): 201 { outcome: "REQUESTED", request }
 // Every bad code (wrong, malformed, revoked, expired) gets the same 404 INVALID_CODE.
-// TODO(phase 7): strict per-user rate limit (06 §5: 10 per 10 min) against code guessing.
+// Rate limits (06 §4, step 7.1): 10 attempts / 10 min per user + 50 / 10 min per IP, counted
+// for EVERY attempt before any work (a failed guess is known only after the attempt).
 import { z } from "zod";
 
 import { requireUser } from "@/server/auth/session";
@@ -13,6 +14,7 @@ import { route } from "@/server/core/route";
 import { parseJson } from "@/server/core/validate";
 import { redeemInvite } from "@/server/modules/invites/redeem";
 import { requestConstraintErrors } from "@/server/modules/requests/service";
+import { clientIp, enforceLimits } from "@/server/ratelimit/limiter";
 
 const redeemSchema = z.strictObject({
   // Only a sanity bound: the format check happens in the service, so a malformed code gets
@@ -22,6 +24,10 @@ const redeemSchema = z.strictObject({
 
 export const POST = route(async (req: Request) => {
   const { user } = await requireUser(req);
+  await enforceLimits([
+    { rule: "redeem.user", subject: user.id },
+    { rule: "redeem.ip", subject: clientIp(req) },
+  ]);
   const input = await parseJson(req, redeemSchema);
   return runMutation(
     req,

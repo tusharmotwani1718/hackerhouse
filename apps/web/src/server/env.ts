@@ -2,6 +2,8 @@ import "server-only";
 
 import { z } from "zod";
 
+import { isRateLimitRuleName, type RateLimitRule } from "./ratelimit/rules";
+
 /**
  * Server environment, validated once at startup (see src/instrumentation.ts).
  * Read config through `getEnv()`, never through `process.env` directly.
@@ -32,6 +34,43 @@ const intWithDefault = (defaultValue: number, min: number, max: number) =>
       .max(max, { error: `must be <= ${max}` })
       .default(defaultValue),
   );
+
+/**
+ * RATE_LIMIT_OVERRIDES: `rule=LIMIT/WINDOW` pairs, comma-separated; WINDOW = a number + s|m|h.
+ * e.g. `redeem.user=3/60s,redeem.ip=100/10m`. Unknown rule names stop the server (a typo would
+ * otherwise silently keep the default).
+ */
+const WINDOW_UNIT_MS = { s: 1_000, m: 60_000, h: 3_600_000 } as const;
+const OVERRIDE_PATTERN = /^([a-z_.]+)=(\d+)\/(\d+)([smh])$/;
+
+const rateLimitOverrides = z.preprocess(
+  (value) => (value === undefined ? "" : value),
+  z.string().transform((value, ctx) => {
+    const overrides: Record<string, RateLimitRule> = {};
+    for (const item of value
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean)) {
+      const match = OVERRIDE_PATTERN.exec(item);
+      if (!match) {
+        ctx.addIssue({ code: "custom", message: `"${item}" must look like rule=10/60s` });
+        continue;
+      }
+      const [, name = "", limit = "0", amount = "0", unit = "s"] = match;
+      if (!isRateLimitRuleName(name)) {
+        ctx.addIssue({ code: "custom", message: `"${name}" is not a rate-limit rule` });
+        continue;
+      }
+      const windowMs = Number(amount) * WINDOW_UNIT_MS[unit as keyof typeof WINDOW_UNIT_MS];
+      if (Number(limit) < 1 || windowMs < 1_000) {
+        ctx.addIssue({ code: "custom", message: `"${item}" needs limit >= 1 and window >= 1s` });
+        continue;
+      }
+      overrides[name] = { limit: Number(limit), windowMs };
+    }
+    return overrides;
+  }),
+);
 
 /** `.env.example` ships a dev secret starting with this; production refuses it. */
 const DEV_SECRET_PREFIX = "dev-only-";
@@ -91,6 +130,9 @@ const schema = z
     SSE_MAX_STREAMS_PER_USER: intWithDefault(5, 1, 100),
     /** Bytes a stream may queue for a client that isn't reading before it is cut off (D6). */
     SSE_BUFFER_BYTES: intWithDefault(262_144, 1_024, 16_777_216),
+
+    // Rate limiting (Phase 7). Limits live in ratelimit/rules.ts; this overrides some of them.
+    RATE_LIMIT_OVERRIDES: rateLimitOverrides,
   })
   // lock_timeout must fire first: it is the only one that frees a connection blocked inside
   // Postgres, and it yields a clean 55P03 instead of an "expired transaction" error.

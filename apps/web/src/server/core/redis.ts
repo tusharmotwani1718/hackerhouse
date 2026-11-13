@@ -3,12 +3,14 @@ import "server-only";
 import { createClient } from "redis";
 
 import { getEnv } from "../env";
+import { SLIDING_WINDOW_SCRIPT } from "../ratelimit/sliding-window";
 import { logger } from "./logger";
 
 /**
  * The shared Redis COMMAND client (step 6.1): one per process, lazy (so `next build` never
  * connects), cached on globalThis (dev hot reload would otherwise open a new one per reload).
- * Used for PUBLISH now and by the rate limiter (Phase 7). Commands are pipelined on this one
+ * Used for PUBLISH and by the rate limiter (Phase 7). Commands are pipelined on this one
+ * Same connection for command and publish
  * TCP connection, so it needs no pool (unlike Postgres: no transaction ever holds it).
  *
  * The SUBSCRIBER connection is separate (a subscribed connection accepts no normal commands):
@@ -25,6 +27,8 @@ function createCommandClient() {
     // wait for Redis to come back (6.1 D5). The caller logs the failure.
     disableOfflineQueue: true,
     socket: { connectTimeout: 2_000, reconnectStrategy },
+    // Lua scripts callable as methods (EVALSHA with automatic fallback): the rate limiter (7.1).
+    scripts: { slidingWindow: SLIDING_WINDOW_SCRIPT },
   });
 }
 

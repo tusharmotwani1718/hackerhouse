@@ -10,6 +10,8 @@ export type RequestContext = {
   requestId: string;
   /** Set by `requireUser` from step 1.1. */
   userId?: string;
+  /** Set by `enforceLimits` (step 7.1): route() turns it into RateLimit-* headers. */
+  rateLimit?: { limit: number; remaining: number; resetSeconds: number };
 };
 
 const storage = new AsyncLocalStorage<RequestContext>();

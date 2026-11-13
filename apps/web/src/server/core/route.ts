@@ -2,7 +2,7 @@ import "server-only";
 
 import { connection } from "next/server";
 
-import { runWithContext } from "./context";
+import { getRequestContext, runWithContext } from "./context";
 import { AppError } from "./errors";
 import { errorResponse } from "./http";
 import { logger } from "./logger";
@@ -30,7 +30,8 @@ function toAppError(error: unknown): AppError {
  *     to prerender them; this stops it before any of our code runs (08 §S4).
  *  2. request id (header in, header out) + request context for logs,
  *  3. errors → error envelope (500s never leak internals; full error goes to the log),
- *  4. one access-log line per request.
+ *  4. RateLimit-* headers when the handler called enforceLimits (Phase 7),
+ *  5. one access-log line per request.
  *
  *   export const POST = route(async (req, ctx) => ok(...));
  */
@@ -55,6 +56,13 @@ export function route<Ctx>(handler: (req: Request, ctx: Ctx) => Promise<Response
       }
 
       response.headers.set("X-Request-Id", requestId);
+      // Rate-limited endpoints (Phase 7): the tightest rule's budget, on success AND on 429.
+      const rateLimit = getRequestContext()?.rateLimit;
+      if (rateLimit) {
+        response.headers.set("RateLimit-Limit", String(rateLimit.limit));
+        response.headers.set("RateLimit-Remaining", String(rateLimit.remaining));
+        response.headers.set("RateLimit-Reset", String(rateLimit.resetSeconds));
+      }
       if (!response.headers.has("Cache-Control")) response.headers.set("Cache-Control", "no-store");
 
       logger.info("request", {
