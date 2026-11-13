@@ -6,5 +6,5 @@ import { createAuthClient } from "better-auth/react";
  */
 export const authClient = createAuthClient();
 
-/** Where people land after signing in or up (temporary until the app pages exist). */
-export const AFTER_AUTH_PATH = "/";
+/** Where people land after signing in or up. */
+export const AFTER_AUTH_PATH = "/hackathons";

@@ -2,24 +2,12 @@ import "server-only";
 
 import { z } from "zod";
 
-/** Lowercase letters/digits with single hyphens between them. Same rule as the DB CHECK. */
-export const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-export const SLUG_MIN = 3;
-export const SLUG_MAX = 60;
+import { SLUG, SLUG_MAX, SLUG_MIN, slugify } from "../../../lib/slugify";
+
+export { SLUG, SLUG_MAX, SLUG_MIN, slugify };
+
 /** 02 §3.2: 1 ≤ min ≤ max ≤ 10. */
 export const TEAM_SIZE_MAX = 10;
-
-/** "HackFest 2026!" → "hackfest-2026", "Café Ünïcode" → "cafe-unicode". May come out too short. */
-export function slugify(name: string): string {
-  return name
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "") // drop accents left over by NFKD
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, SLUG_MAX)
-    .replace(/-+$/, ""); // the cut may end on a hyphen
-}
 
 const name = z
   .string({ error: "must be a string" })

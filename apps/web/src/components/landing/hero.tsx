@@ -1,11 +1,14 @@
-import Link from "next/link";
-import type { CSSProperties } from "react";
-
-import { Button } from "@hacker-house/ui/components/button";
+import { Suspense, type CSSProperties } from "react";
 
 import { Logo } from "@/components/brand/logo";
 
 import { FeatureCard, type FeatureCardProps } from "./feature-card";
+import {
+  HeroCta,
+  HeroCtaFallback,
+  HeroHeaderActions,
+  HeroHeaderActionsFallback,
+} from "./hero-actions";
 
 // PLACEHOLDER content: the real copy for the four cards comes later.
 const FEATURES: FeatureCardProps[] = [
@@ -75,21 +78,9 @@ export function Hero() {
         <header className="flex items-center justify-between px-5 py-5 sm:px-10">
           <Logo />
           <nav className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              nativeButton={false}
-              render={<Link href="/sign-in" />}
-              className="h-9 rounded-full bg-card px-4 shadow-sm ring-1 ring-border"
-            >
-              Sign in
-            </Button>
-            <Button
-              nativeButton={false}
-              render={<Link href="/sign-up" />}
-              className="hidden h-9 rounded-full bg-foreground px-4 text-background hover:bg-foreground/85 sm:inline-flex"
-            >
-              Get started
-            </Button>
+            <Suspense fallback={<HeroHeaderActionsFallback />}>
+              <HeroHeaderActions />
+            </Suspense>
           </nav>
         </header>
 
@@ -102,13 +93,9 @@ export function Hero() {
             proof, fast and modern way of participating and building teams for your hackathon.
           </p>
           <div className="mt-9 flex justify-center">
-            <Button
-              nativeButton={false}
-              render={<Link href="/sign-up" />}
-              className="h-11 rounded-full px-6 text-[0.95rem] shadow-[0_12px_32px_-10px_var(--primary)] ring-1 ring-white/30 ring-inset hover:bg-primary/90"
-            >
-              Get started
-            </Button>
+            <Suspense fallback={<HeroCtaFallback />}>
+              <HeroCta />
+            </Suspense>
           </div>
         </div>
 
