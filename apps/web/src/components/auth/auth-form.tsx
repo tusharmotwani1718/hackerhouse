@@ -60,6 +60,7 @@ export function AuthForm({ mode, className }: { mode: AuthMode; className?: stri
       return;
     }
     // Signed in (sign-up signs in too): the session cookie is set; re-render with it.
+    setPending(false);
     router.replace(AFTER_AUTH_PATH);
     router.refresh();
   }
