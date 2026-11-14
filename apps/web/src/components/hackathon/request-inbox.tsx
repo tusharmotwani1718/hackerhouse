@@ -104,7 +104,7 @@ export function RequestInbox({ teamId, initial }: { teamId: string; initial: Pag
   }
 
   return (
-    <section className="rounded-xl bg-card p-5 ring-1 ring-border">
+    <section id="join-requests" className="scroll-mt-24 rounded-xl bg-card p-5 ring-1 ring-border">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-semibold">Join requests</h2>

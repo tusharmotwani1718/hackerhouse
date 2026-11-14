@@ -104,3 +104,30 @@ export const DATE = new Intl.DateTimeFormat("en-GB", {
   year: "numeric",
   timeZone: "UTC",
 });
+
+/** One teammate suggestion (GET /api/teams/{id}/suggestions item, step 8.1). */
+export type SuggestionView = {
+  participant: {
+    id: string;
+    name: string;
+    githubUsername: string | null;
+    githubVerified: boolean;
+    portfolioUrl: string | null;
+  };
+  score: number;
+  breakdown: {
+    /** Every skill the candidate has, biggest gain first. */
+    skills: { skill: string; teamLevel: number; candidateLevel: number; gain: number }[];
+    skillGain: number;
+    /** team: "UTC+05:30"; candidate: "Europe/Berlin (UTC+01:00)". */
+    timezone: { team: string; candidate: string; overlapHours: number; factor: number };
+    formula: string;
+  };
+  hasRequestedYourTeam: boolean;
+};
+
+export type SuggestionsView = {
+  method: string;
+  team: { id: string; timezone: string };
+  suggestions: SuggestionView[];
+};

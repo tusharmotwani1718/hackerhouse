@@ -10,6 +10,7 @@ import { InviteCodeBox } from "./invite-code-box";
 import { InviteCodeManager } from "./invite-code-manager";
 import { LeaveTeamButton } from "./leave-team-button";
 import { LookingToggle } from "./looking-toggle";
+import { MyTeamTabs } from "./my-team-tabs";
 import { RemoveMemberButton } from "./remove-member-button";
 import { RequestInbox } from "./request-inbox";
 import { DATE, type MyTeamView } from "./types";
@@ -18,10 +19,22 @@ const LEVEL_DOT = ["", "bg-chart-5", "bg-chart-4", "bg-chart-3", "bg-chart-2", "
 
 /**
  * "My team" tab content: the team, its invite code (members only), the join-request inbox
- * (leaders of APPROVAL teams), and its members. The leader also gets the tools: the "looking
+ * (leaders of APPROVAL teams), and its members. Leaders also get a "Suggest teammates"
+ * sub-tab. The leader also gets the tools: the "looking
  * for members" switch, new/revoke invite code, removing members, and the activity log.
  */
 export function MyTeam({ team }: { team: MyTeamView }) {
+  if (!team.isLeader) return <TeamDetails team={team} />;
+  // Leaders: "Team details" + "Suggest teammates" sub-tabs.
+  return (
+    <MyTeamTabs teamId={team.id} seatsLeft={team.seatsLeft} memberCount={team.memberCount}>
+      <TeamDetails team={team} />
+    </MyTeamTabs>
+  );
+}
+
+/** The team, invite code, inbox, activity log and members. */
+function TeamDetails({ team }: { team: MyTeamView }) {
   return (
     <div className="grid gap-5">
       <section className="rounded-xl bg-card p-5 ring-1 ring-border">
