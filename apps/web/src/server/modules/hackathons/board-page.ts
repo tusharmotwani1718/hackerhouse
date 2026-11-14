@@ -89,6 +89,8 @@ export async function loadBoardPage(
       memberCount: team.memberCount,
       maxSize: team.maxSize,
       seatsLeft: team.seatsLeft,
+      listed: team.listed,
+      version: team.version,
       leader: team.leader,
       skillProfile: team.skillProfile,
       createdAt: team.createdAt.toISOString(),

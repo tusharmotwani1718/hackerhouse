@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useReducer, useState } from "react";
 
 import { Button } from "@hacker-house/ui/components/button";
 
 import { api } from "@/lib/api";
 
+import { useLiveEvents } from "@/components/hackathon/live-provider";
+
+import { listReducer } from "./live-merge";
 import { TeamRow } from "./team-row";
 import { filtersToSearch, type BoardFilters, type BoardTeam, type BoardViewer } from "./types";
 
@@ -19,11 +22,18 @@ type Props = {
 /**
  * The teams on the right. The first page comes from the server render (for the current
  * filters); "Load more" fetches the next pages from the API with the same filters + cursor.
- * When the server renders again (new filters, or after joining), the list starts over.
+ * When the server renders again (new filters, a resync, or after joining), the list starts
+ * over, replaying recent live events the snapshot may predate. Live team.* events are merged
+ * in place (05 §3.1, live-merge.ts).
  */
 export function TeamList({ slug, filters, viewer, initial }: Props) {
-  const [teams, setTeams] = useState(initial.teams);
-  const [cursor, setCursor] = useState(initial.nextCursor);
+  const [list, dispatch] = useReducer(listReducer, {
+    teams: initial.teams,
+    count: initial.totalCount,
+    cursor: initial.nextCursor,
+    recent: new Map(),
+  });
+  const { teams, cursor } = list;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,10 +42,20 @@ export function TeamList({ slug, filters, viewer, initial }: Props) {
   const [shown, setShown] = useState(initial);
   if (initial !== shown) {
     setShown(initial);
-    setTeams(initial.teams);
-    setCursor(initial.nextCursor);
+    dispatch({
+      type: "reset",
+      teams: initial.teams,
+      count: initial.totalCount,
+      cursor: initial.nextCursor,
+      filters,
+    });
     setError(null);
   }
+
+  useLiveEvents((event, data) => {
+    if (event.startsWith("team.")) dispatch({ type: "event", event, data, filters });
+    else if (event === "stream.ready" || event === "stream.resync") dispatch({ type: "synced" });
+  });
 
   async function loadMore() {
     if (!cursor) return;
@@ -49,11 +69,7 @@ export function TeamList({ slug, filters, viewer, initial }: Props) {
       `/api/hackathons/${slug}/${endpoint}?${params.toString()}`,
     );
     if (result.ok) {
-      setTeams((current) => {
-        const seen = new Set(current.map((team) => team.id));
-        return [...current, ...result.data.teams.filter((team) => !seen.has(team.id))];
-      });
-      setCursor(result.nextCursor ?? null);
+      dispatch({ type: "appendPage", teams: result.data.teams, cursor: result.nextCursor ?? null });
     } else {
       setError(result.message);
     }
@@ -65,8 +81,8 @@ export function TeamList({ slug, filters, viewer, initial }: Props) {
   return (
     <section aria-label="Teams" className="min-w-0">
       <p className="mb-3 text-sm text-muted-foreground">
-        <span className="font-semibold text-foreground tabular-nums">{initial.totalCount}</span>{" "}
-        {initial.totalCount === 1 ? "team" : "teams"}
+        <span className="font-semibold text-foreground tabular-nums">{list.count}</span>{" "}
+        {list.count === 1 ? "team" : "teams"}
         {filters.show === "looking" ? " looking for members" : " in total"}
         {filtered && " (filtered)"}
       </p>

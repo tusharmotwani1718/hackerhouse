@@ -11,6 +11,10 @@ export type BoardTeam = {
   memberCount: number;
   maxSize: number;
   seatsLeft: number;
+  /** Shown on the board: looking for members AND not full. */
+  listed: boolean;
+  /** Bumped on every change; a live event replaces the card only if its version is newer. */
+  version: number;
   leader: { name: string };
   skillProfile: Partial<Record<string, number>>;
   createdAt: string;

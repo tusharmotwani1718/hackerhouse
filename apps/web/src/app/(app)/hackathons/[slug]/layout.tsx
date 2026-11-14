@@ -4,6 +4,11 @@ import { Suspense } from "react";
 import { HackathonHeader } from "@/components/board/hackathon-header";
 import { CreateTeamDialog } from "@/components/hackathon/create-team-dialog";
 import { HackathonTabs } from "@/components/hackathon/hackathon-tabs";
+import {
+  HackathonLiveProvider,
+  LiveConnector,
+  LiveStatus,
+} from "@/components/hackathon/live-provider";
 import { getCurrentSession } from "@/server/auth/current-session";
 import { AppError } from "@/server/core/errors";
 import { runReadTx } from "@/server/core/tx";
@@ -11,16 +16,19 @@ import { loadHackathonShell } from "@/server/modules/hackathons/hackathon-pages"
 
 /**
  * Shared frame of a hackathon's tabs (Teams board / My team / My requests): header with the
- * viewer's status, the tab bar and "Create team". Each tab is its own page below.
+ * viewer's status, the tab bar and "Create team". Each tab is its own page below. The live
+ * stream (one per tab) lives here too, so it stays open while switching tabs.
  */
 export default function HackathonLayout({ params, children }: LayoutProps<"/hackathons/[slug]">) {
   return (
-    <div className="grid gap-6">
-      <Suspense fallback={<ShellSkeleton />}>
-        <HackathonShell params={params} />
-      </Suspense>
-      {children}
-    </div>
+    <HackathonLiveProvider>
+      <div className="grid gap-6">
+        <Suspense fallback={<ShellSkeleton />}>
+          <HackathonShell params={params} />
+        </Suspense>
+        {children}
+      </div>
+    </HackathonLiveProvider>
   );
 }
 
@@ -46,11 +54,22 @@ async function HackathonShell({ params }: Pick<LayoutProps<"/hackathons/[slug]">
 
   return (
     <>
+      <LiveConnector
+        hackathonId={hackathon.id}
+        slug={hackathon.slug}
+        myTeamId={viewer.team?.id ?? null}
+        isLeader={viewer.isLeader}
+      />
       <HackathonHeader hackathon={hackathon} viewer={viewer} />
       <HackathonTabs
         slug={hackathon.slug}
         teamBadge={viewer.pendingInbox}
-        action={<CreateTeamDialog slug={hackathon.slug} disabledReason={disabledReason} />}
+        action={
+          <div className="flex items-center gap-4">
+            <LiveStatus />
+            <CreateTeamDialog slug={hackathon.slug} disabledReason={disabledReason} />
+          </div>
+        }
       />
     </>
   );
