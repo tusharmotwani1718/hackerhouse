@@ -35,6 +35,8 @@ export type BoardViewer = {
   team: { id: string; name: string } | null;
   /** Teams the viewer has a PENDING request to. */
   pendingTeamIds: string[];
+  /** Admins get an "Activity" button on every card (the team's audit log). */
+  isAdmin?: boolean;
 };
 
 export function filtersToSearch(filters: BoardFilters): URLSearchParams {

@@ -44,7 +44,7 @@ async function TeamsBoard({ params, searchParams }: PageProps<"/hackathons/[slug
       <TeamList
         slug={data.hackathon.slug}
         filters={filters}
-        viewer={data.viewer}
+        viewer={{ ...data.viewer, isAdmin: session.user.role === "ADMIN" }}
         initial={{ teams: data.teams, totalCount: data.totalCount, nextCursor: data.nextCursor }}
       />
     </div>

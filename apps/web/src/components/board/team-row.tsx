@@ -5,6 +5,7 @@ import { cn } from "@hacker-house/ui/lib/utils";
 import { skillLabel } from "@/lib/skills";
 
 import { TeamAction } from "./team-action";
+import { TeamActivityButton } from "./team-activity-button";
 import type { BoardTeam, BoardViewer } from "./types";
 
 // Fixed format and time zone: the server and the browser render the same text (no mismatch).
@@ -64,6 +65,7 @@ export function TeamRow({ team, viewer }: { team: BoardTeam; viewer: BoardViewer
               Invite only
             </span>
           )}
+          {viewer.isAdmin && <TeamActivityButton teamId={team.id} teamName={team.name} />}
           <TeamAction team={team} viewer={viewer} />
         </div>
       </div>

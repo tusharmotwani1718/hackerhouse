@@ -29,7 +29,39 @@ export type MyTeamView = {
   invite: { code: string; expiresAt: string } | null;
   /** Leader of an APPROVAL team: the PENDING requests (first page); otherwise null. */
   inbox: { requests: InboxRequestView[]; totalCount: number; nextCursor: string | null } | null;
+  /** Leader only: the team's activity log, first page (all categories); otherwise null. */
+  activity: AuditPage | null;
 };
+
+export type AuditCategory = "team" | "requests" | "invites";
+
+export type AuditAction =
+  | "TEAM_CREATED"
+  | "TEAM_DELETED"
+  | "MEMBER_JOINED"
+  | "MEMBER_LEFT"
+  | "MEMBER_REMOVED"
+  | "LEADER_CHANGED"
+  | "LOOKING_TOGGLED"
+  | "REQUEST_CREATED"
+  | "REQUEST_APPROVED"
+  | "REQUEST_DECLINED"
+  | "REQUEST_CANCELLED"
+  | "INVITE_CODE_GENERATED"
+  | "INVITE_CODE_REVOKED";
+
+/** One activity-log entry (GET /api/teams/{id}/audit item; the leader's curated fields). */
+export type AuditEntryView = {
+  id: string;
+  /** An AuditAction for team logs; typed as string so a newer server action still renders. */
+  action: AuditAction | (string & {});
+  createdAt: string;
+  actor: { name: string } | null;
+  target: { name: string } | null;
+  details: Record<string, unknown>;
+};
+
+export type AuditPage = { entries: AuditEntryView[]; nextCursor: string | null };
 
 export type RequestStatus = "PENDING" | "APPROVED" | "DECLINED" | "CANCELLED";
 

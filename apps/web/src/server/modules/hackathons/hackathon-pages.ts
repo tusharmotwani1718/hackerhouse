@@ -4,6 +4,7 @@ import type { BoardViewer } from "@/components/board/types";
 import type { InboxRequestView, MyRequestView, MyTeamView } from "@/components/hackathon/types";
 
 import { AppError } from "../../core/errors";
+import { listTeamAudit } from "../audit/reads";
 import type { Tx } from "../../core/tx";
 import { getMyStatus } from "../participants/service";
 import { listInbox, listMyRequests, type InboxItem } from "../requests/reads";
@@ -13,6 +14,7 @@ import { getHackathon, type HackathonDetail } from "./service";
 
 export const MY_REQUESTS_PAGE_SIZE = 20;
 export const INBOX_PAGE_SIZE = 20;
+export const ACTIVITY_PAGE_SIZE = 20;
 
 /** An inbox row for the client (dates as ISO strings). */
 export function toInboxView(item: InboxItem): InboxRequestView {
@@ -109,6 +111,11 @@ export async function loadMyTeam(
     page.viewer.isLeader && team.joinPolicy === "APPROVAL"
       ? await listInbox(tx, userId, team.id, { status: "PENDING", limit: INBOX_PAGE_SIZE })
       : null;
+  // The leader's activity log, first page of every category. Read as the leader (the curated
+  // view), even when the leader is also an admin.
+  const activity = page.viewer.isLeader
+    ? await listTeamAudit(tx, { id: userId, role: "USER" }, team.id, { limit: ACTIVITY_PAGE_SIZE })
+    : null;
   return {
     registered: true,
     team: {
@@ -139,6 +146,19 @@ export async function loadMyTeam(
             requests: inbox.requests.map(toInboxView),
             totalCount: inbox.totalCount,
             nextCursor: inbox.nextCursor,
+          }
+        : null,
+      activity: activity
+        ? {
+            entries: activity.entries.map((entry) => ({
+              id: entry.id,
+              action: entry.action,
+              createdAt: entry.createdAt.toISOString(),
+              actor: entry.actor,
+              target: entry.target,
+              details: entry.details,
+            })),
+            nextCursor: activity.nextCursor,
           }
         : null,
     },

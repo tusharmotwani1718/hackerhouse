@@ -101,7 +101,7 @@ export type TeamAudit = { entries: AuditEntry[]; nextCursor: string | null };
  */
 export async function listTeamAudit(
   tx: Tx,
-  viewer: AuthUser,
+  viewer: Pick<AuthUser, "id" | "role">,
   teamId: string,
   query: TeamAuditQuery,
 ): Promise<TeamAudit> {

@@ -5,6 +5,7 @@ import { cn } from "@hacker-house/ui/lib/utils";
 import { initials } from "@/lib/initials";
 import { skillLabel } from "@/lib/skills";
 
+import { AuditLog } from "./audit-log";
 import { InviteCodeBox } from "./invite-code-box";
 import { InviteCodeManager } from "./invite-code-manager";
 import { LeaveTeamButton } from "./leave-team-button";
@@ -18,7 +19,7 @@ const LEVEL_DOT = ["", "bg-chart-5", "bg-chart-4", "bg-chart-3", "bg-chart-2", "
 /**
  * "My team" tab content: the team, its invite code (members only), the join-request inbox
  * (leaders of APPROVAL teams), and its members. The leader also gets the tools: the "looking
- * for members" switch, new/revoke invite code, and removing members.
+ * for members" switch, new/revoke invite code, removing members, and the activity log.
  */
 export function MyTeam({ team }: { team: MyTeamView }) {
   return (
@@ -92,6 +93,17 @@ export function MyTeam({ team }: { team: MyTeamView }) {
       </section>
 
       {team.inbox && <RequestInbox teamId={team.id} initial={team.inbox} />}
+
+      {team.activity && (
+        <section className="rounded-xl bg-card p-5 ring-1 ring-border">
+          <h2 className="font-semibold">Activity log</h2>
+          <p className="mt-1 mb-4 text-sm text-muted-foreground">
+            Everything that happened to this team, newest first. Only you (the leader) and admins
+            can see it.
+          </p>
+          <AuditLog teamId={team.id} initial={team.activity} />
+        </section>
+      )}
 
       <section className="rounded-xl bg-card p-5 ring-1 ring-border">
         <h2 className="font-semibold">Members</h2>
