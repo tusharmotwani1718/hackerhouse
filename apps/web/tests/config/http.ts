@@ -11,6 +11,13 @@ export type JoinResult = {
   endedAt: number;
 };
 
+export interface ApiResult {
+  status: number;
+  data: any;
+  error: { code: null | string; message: string; details?: any } | null;
+  headers: Headers;
+}
+
 export async function joinTeam(cookie: string, teamId: string, key = randomUUID()) {
   const startedAt = performance.now();
   const res = await fetch(`${BASE_URL}/api/teams/${teamId}/join`, {
@@ -40,4 +47,33 @@ export function timingSummary(results: JoinResult[]): string {
   const ms = results.map((r) => r.endedAt - r.startedAt).sort((a, b) => a - b);
   const pick = (p: number) => ms[Math.min(ms.length - 1, Math.floor(p * ms.length))]!.toFixed(0);
   return `n=${ms.length} p50=${pick(0.5)}ms p95=${pick(0.95)}ms max=${pick(1)}ms`;
+}
+
+/** One API call, as a signed-in user (cookie) or anonymous (null). */
+export async function api(
+  method: string,
+  path: string,
+  { cookie, body, key }: { cookie?: string | null; body?: unknown; key?: string } = {},
+): Promise<ApiResult> {
+  const headers: Record<string, string> = {};
+  if (cookie) headers.cookie = cookie;
+  if (method !== "GET") {
+    headers["content-type"] = "application/json";
+    headers["idempotency-key"] = key ?? randomUUID(); // mutations require one
+  }
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method,
+    headers,
+    body: method === "GET" ? undefined : JSON.stringify(body ?? {}),
+  });
+  const json = (await res.json().catch(() => ({}))) as {
+    data?: unknown;
+    error?: ApiResult["error"];
+  };
+  return {
+    status: res.status,
+    data: json.data ?? null,
+    error: json.error ?? null,
+    headers: res.headers,
+  };
 }

@@ -23,7 +23,8 @@
     "db:studio": "bun run --cwd packages/db studio",
     "admin": "bun apps/web/scripts/admin.ts",
     "gen:timezones": "bun apps/web/scripts/gen-timezones.ts",
-    "test:race": "bun run --cwd apps/web test:race"
+    "test:race": "bun run --cwd apps/web test:race",
+    "test:api": "next build && bun test ./tests/api"
   },
   "devDependencies": {
     "prettier": "^3.6.2",

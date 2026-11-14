@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
-    "test:race": "next build && bun test ./tests/race"
+    "test:race": "next build && bun test ./tests/race",
+    "test:api": "next build && bun test ./tests/api"
   },
   "dependencies": {
     "@hacker-house/db": "workspace:*",

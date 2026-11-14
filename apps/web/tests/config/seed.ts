@@ -89,3 +89,16 @@ export async function createTeam(input: {
     return team;
   });
 }
+
+/** Give users what registration requires: a GitHub username and one skill. */
+export async function completeProfiles(users: TestUser[]) {
+  for (const u of users) {
+    await db.user.update({
+      where: { id: u.id },
+      data: { githubUsername: `gh-${u.id.slice(0, 8)}` },
+    });
+  }
+  await db.userSkill.createMany({
+    data: users.map((u) => ({ userId: u.id, skill: "BACKEND", level: 3 })),
+  });
+}
