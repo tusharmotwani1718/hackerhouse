@@ -1,17 +1,29 @@
-import { APP_DIR, AUTH_SECRET, BASE_URL, PORT, TEST_DATABASE_URL } from "./env";
+import { createClient } from "redis";
 
-/** Start the production build on PORT against the test DB. Returns a stop function. */
-export async function startApp(): Promise<() => Promise<void>> {
+import { APP_DIR, AUTH_SECRET, BASE_URL, PORT, TEST_DATABASE_URL, TEST_REDIS_URL } from "./env";
+
+/**
+ * Start the production build on PORT against the test DB and the test Redis (emptied first:
+ * every file starts with fresh rate-limit counters). `env` adds variables, e.g. tiny
+ * RATE_LIMIT_OVERRIDES. Returns a stop function.
+ */
+export async function startApp(env: Record<string, string> = {}): Promise<() => Promise<void>> {
   if (await isUp()) throw new Error(`Port ${PORT} is already in use; stop that process first.`);
+  await flushTestRedis();
 
   const proc = Bun.spawn([process.execPath, "x", "next", "start", "-p", String(PORT)], {
     cwd: APP_DIR,
     env: {
       ...process.env,
+      // `bun test` sets NODE_ENV=test, and the app would inherit it: Better Auth then switches
+      // OFF its origin (CSRF) check. Run exactly as production does.
+      NODE_ENV: "production",
       DATABASE_URL: TEST_DATABASE_URL, // process env wins over .env (next.config.ts)
       BETTER_AUTH_URL: BASE_URL,
       BETTER_AUTH_SECRET: AUTH_SECRET, // explicit: must match the cookie signer
+      REDIS_URL: TEST_REDIS_URL,
       LOG_LEVEL: "warn", // keep test output readable; errors still show
+      ...env,
     },
     stdout: "pipe",
     stderr: "pipe",
@@ -45,6 +57,13 @@ function killTree(pid: number): void {
   } else {
     process.kill(pid);
   }
+}
+
+async function flushTestRedis(): Promise<void> {
+  const redis = createClient({ url: TEST_REDIS_URL });
+  await redis.connect();
+  await redis.flushDb(); // database 1 only, never dev's database 0
+  await redis.quit();
 }
 
 /** "Up" = a real route answers. 401 is the expected answer: no cookie sent. */
