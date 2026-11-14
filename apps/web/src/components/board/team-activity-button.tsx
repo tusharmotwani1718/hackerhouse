@@ -41,7 +41,10 @@ export function TeamActivityButton({ teamId, teamName }: { teamId: string; teamN
         Activity
       </Button>
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="right" className="w-full gap-0 data-[side=right]:sm:max-w-2xl!">
+        <SheetContent
+          side="right"
+          className="gap-0 data-[side=right]:w-full! data-[side=right]:sm:max-w-2xl!"
+        >
           <SheetHeader className="border-b">
             <SheetDescription>Activity log · admin view</SheetDescription>
             <SheetTitle className="text-lg">{teamName}</SheetTitle>

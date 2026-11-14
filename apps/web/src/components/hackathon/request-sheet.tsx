@@ -47,7 +47,10 @@ export function RequestSheet({
 
   return (
     <Sheet open={request !== null} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full gap-0 sm:max-w-md">
+      <SheetContent
+        side="right"
+        className="gap-0 data-[side=right]:w-full! data-[side=right]:sm:max-w-md!"
+      >
         {request && r && status && (
           <>
             <SheetHeader className="border-b">
