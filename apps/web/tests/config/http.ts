@@ -11,12 +11,17 @@ export type JoinResult = {
   endedAt: number;
 };
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- response bodies: each test asserts the
+   shape it expects with expect(); typing every endpoint's body here would only add noise. */
 export interface ApiResult {
   status: number;
   data: any;
   error: { code: null | string; message: string; details?: any } | null;
+  /** Paginated lists: the cursor for the next page, or null on the last page. */
+  nextCursor: string | null;
   headers: Headers;
 }
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 export async function joinTeam(cookie: string, teamId: string, key = randomUUID()) {
   const startedAt = performance.now();
@@ -53,27 +58,40 @@ export function timingSummary(results: JoinResult[]): string {
 export async function api(
   method: string,
   path: string,
-  { cookie, body, key }: { cookie?: string | null; body?: unknown; key?: string } = {},
+  {
+    cookie,
+    body,
+    key,
+    headers: extra,
+  }: {
+    cookie?: string | null;
+    body?: unknown;
+    key?: string;
+    /** Extra request headers, e.g. X-Real-IP (what nginx sets in production). */
+    headers?: Record<string, string>;
+  } = {},
 ): Promise<ApiResult> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...extra };
   if (cookie) headers.cookie = cookie;
-  if (method !== "GET") {
-    headers["content-type"] = "application/json";
-    headers["idempotency-key"] = key ?? randomUUID(); // mutations require one
-  }
+  // DELETE carries no body (9c); every other mutation sends JSON, `{}` by default.
+  const sendsBody = method !== "GET" && (method !== "DELETE" || body !== undefined);
+  if (sendsBody) headers["content-type"] = "application/json";
+  if (method !== "GET") headers["idempotency-key"] = key ?? randomUUID(); // mutations need one
   const res = await fetch(`${BASE_URL}${path}`, {
     method,
     headers,
-    body: method === "GET" ? undefined : JSON.stringify(body ?? {}),
+    body: sendsBody ? JSON.stringify(body ?? {}) : undefined,
   });
   const json = (await res.json().catch(() => ({}))) as {
     data?: unknown;
     error?: ApiResult["error"];
+    nextCursor?: string | null;
   };
   return {
     status: res.status,
     data: json.data ?? null,
     error: json.error ?? null,
+    nextCursor: json.nextCursor ?? null,
     headers: res.headers,
   };
 }

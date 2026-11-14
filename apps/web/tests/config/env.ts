@@ -30,6 +30,20 @@ function testDatabaseUrl(): string {
 }
 
 export const TEST_DATABASE_URL = testDatabaseUrl();
+
+/**
+ * The dev Redis, logical database 1 (dev uses 0): the rate-limit counters of test runs never
+ * mix with dev's. (Pub/sub channels are server-wide, but our channel names carry random ids,
+ * so nothing crosses over in practice.)
+ */
+function testRedisUrl(): string {
+  if (process.env.TEST_REDIS_URL) return process.env.TEST_REDIS_URL;
+  const url = new URL(required("REDIS_URL"));
+  url.pathname = "/1";
+  return url.toString();
+}
+
+export const TEST_REDIS_URL = testRedisUrl();
 export const AUTH_SECRET = required("BETTER_AUTH_SECRET");
 export const PORT = 3100;
 export const BASE_URL = `http://localhost:${PORT}`;

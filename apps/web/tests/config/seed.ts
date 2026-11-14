@@ -70,23 +70,32 @@ export async function createTeam(input: {
   maxSize: number; // must equal the hackathon's max (teams_hackathon_fkey enforces it)
   memberParticipantIds: string[];
   name?: string;
+  joinPolicy?: "OPEN" | "APPROVAL";
+  access?: "PUBLIC" | "INVITE_ONLY";
+  isLooking?: boolean;
 }) {
   return db.$transaction(async (tx) => {
     const team = await tx.team.create({
       data: {
         hackathonId: input.hackathonId,
         name: input.name ?? `Team ${randomBytes(3).toString("hex")}`,
-        joinPolicy: "OPEN",
-        access: "PUBLIC",
+        joinPolicy: input.joinPolicy ?? "OPEN",
+        access: input.access ?? "PUBLIC",
+        isLooking: input.isLooking ?? true,
         leaderParticipantId: input.memberParticipantIds[0]!,
         memberCount: input.memberParticipantIds.length,
         maxSize: input.maxSize,
       },
     });
-    await tx.participant.updateMany({
-      where: { id: { in: input.memberParticipantIds } },
-      data: { teamId: team.id, teamJoinedAt: new Date() },
-    });
+    // Joined one second apart, in the given order: "longest-joined" (who leads next) is
+    // then the order of `memberParticipantIds`, not a tie broken by random ids.
+    const start = Date.now() - 60 * 60 * 1000;
+    for (const [i, participantId] of input.memberParticipantIds.entries()) {
+      await tx.participant.update({
+        where: { id: participantId },
+        data: { teamId: team.id, teamJoinedAt: new Date(start + i * 1000) },
+      });
+    }
     return team;
   });
 }
@@ -102,4 +111,26 @@ export async function completeProfiles(users: TestUser[]) {
   await db.userSkill.createMany({
     data: users.map((u) => ({ userId: u.id, skill: "BACKEND", level: 3 })),
   });
+}
+
+export type Registered = TestUser & { participantId: string };
+
+/** `count` users with complete profiles, registered in the hackathon: ready to act in it. */
+export async function registeredUsers(
+  hackathonId: string,
+  count: number,
+  prefix: string,
+): Promise<Registered[]> {
+  const users = await createUsers(count, prefix);
+  await completeProfiles(users);
+  const participants = await registerAll(hackathonId, users);
+  const byUser = new Map(participants.map((p) => [p.userId, p.id]));
+  return users.map((user) => ({ ...user, participantId: byUser.get(user.id)! }));
+}
+
+/** A user with role ADMIN (what the admin CLI sets). */
+export async function createAdmin(prefix = "admin"): Promise<TestUser> {
+  const [admin] = await createUsers(1, `${prefix}-${randomBytes(3).toString("hex")}`);
+  await db.user.update({ where: { id: admin!.id }, data: { role: "ADMIN" } });
+  return admin!;
 }
