@@ -20,16 +20,31 @@ export async function startApp(): Promise<() => Promise<void>> {
   try {
     await waitUntilUp(60_000);
   } catch (error) {
-    proc.kill();
+    killTree(proc.pid);
     // The app's own output is the fastest way to see why it didn't start.
     console.error(await new Response(proc.stderr).text());
     throw error;
   }
 
   return async () => {
-    proc.kill();
+    killTree(proc.pid);
     await proc.exited;
   };
+}
+
+/**
+ * Stop the server AND its children. `bun x next start` runs Next in a child `node` process;
+ * on Windows, killing the parent leaves that child alive, still holding the port.
+ */
+function killTree(pid: number): void {
+  if (process.platform === "win32") {
+    Bun.spawnSync(["taskkill", "/pid", String(pid), "/T", "/F"], {
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+  } else {
+    process.kill(pid);
+  }
 }
 
 /** "Up" = a real route answers. 401 is the expected answer: no cookie sent. */

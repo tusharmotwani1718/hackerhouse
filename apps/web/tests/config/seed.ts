@@ -39,7 +39,8 @@ export async function createUsers(count: number, prefix: string): Promise<TestUs
 }
 
 export async function createHackathon(maxTeamSize: number) {
-  const [creator] = await createUsers(1, "admin");
+  // A unique prefix: emails are UNIQUE, and a test may create more than one hackathon.
+  const [creator] = await createUsers(1, `admin-${randomBytes(3).toString("hex")}`);
   return db.hackathon.create({
     data: {
       name: "Race Hackathon",
