@@ -23,6 +23,8 @@ next-env.d.ts
 
 # testing
 coverage/
+# load test output: live session cookies of seeded users (step 10.3)
+apps/web/load/.output/
 
 # logs
 *.log

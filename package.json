@@ -24,6 +24,7 @@
     "admin": "bun apps/web/scripts/admin.ts",
     "gen:timezones": "bun apps/web/scripts/gen-timezones.ts",
     "test:race": "bun run --cwd apps/web test:race",
+    "load:seed": "bun apps/web/load/seed.ts",
     "test:api": "next build && bun test ./tests/api"
   },
   "devDependencies": {
