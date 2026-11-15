@@ -27,7 +27,7 @@
     "load:seed": "bun apps/web/load/seed.ts",
     "load:serve": "bun apps/web/load/serve.ts",
     "load:board": "k6 run apps/web/load/board.k6.js",
-    "test:api": "next build && bun test ./tests/api"
+    "test:api": "bun run --cwd apps/web test:api"
   },
   "devDependencies": {
     "prettier": "^3.6.2",
