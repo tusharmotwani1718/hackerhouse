@@ -39,7 +39,7 @@ export const TEST_DATABASE_URL = testDatabaseUrl();
 function testRedisUrl(): string {
   if (process.env.TEST_REDIS_URL) return process.env.TEST_REDIS_URL;
   const url = new URL(required("REDIS_URL"));
-  url.pathname = "/1";
+  url.pathname = "/1"; // redis for the tests, rate limit counters not colloide with dev(0)
   return url.toString();
 }
 

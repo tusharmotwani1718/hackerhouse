@@ -14,14 +14,24 @@
  * Standalone like the admin CLI: no imports from the app's server-only modules.
  */
 import { createHmac, randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { parseEnv } from "node:util";
 
 import { createDbClient, type DbClient, type Skill } from "@hacker-house/db";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { hashPassword } from "better-auth/crypto";
+
+import {
+  assertLoadDatabase,
+  databaseName,
+  loadDatabaseUrl,
+  loadRootEnv,
+  OUTPUT_DIR,
+  REPO_ROOT,
+  required,
+  SESSIONS_FILE,
+} from "./env";
 
 // ------------------------------------------------------------------------------- settings
 
@@ -43,38 +53,6 @@ const SIZE_WEIGHTS: [number, number][] = [
   [4, 20],
   [5, 20],
 ];
-
-const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
-const OUTPUT_DIR = path.join(import.meta.dirname, ".output");
-const SESSIONS_FILE = path.join(OUTPUT_DIR, "sessions.json");
-
-// ------------------------------------------------------------------------------------ env
-
-function loadRootEnv(): void {
-  const file = path.join(REPO_ROOT, ".env");
-  if (!existsSync(file)) return;
-  for (const [key, value] of Object.entries(parseEnv(readFileSync(file, "utf8")))) {
-    if (process.env[key] === undefined) process.env[key] = value;
-  }
-}
-
-function required(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`${name} is not set (copy .env.example to .env)`);
-  return value;
-}
-
-/** LOAD_DATABASE_URL, or the dev URL with the database name swapped for hacker_house_load. */
-function loadDatabaseUrl(): string {
-  if (process.env.LOAD_DATABASE_URL) return process.env.LOAD_DATABASE_URL;
-  const url = new URL(required("DATABASE_URL"));
-  url.pathname = "/hacker_house_load";
-  return url.toString();
-}
-
-function databaseName(url: string): string {
-  return decodeURIComponent(new URL(url).pathname.slice(1));
-}
 
 // ------------------------------------------------------------------- deterministic random
 
@@ -166,10 +144,8 @@ function step(label: string, startedAt: number): void {
 // --------------------------------------------------------------------- database prepare
 
 async function prepareDatabase(url: string): Promise<void> {
+  assertLoadDatabase(url);
   const name = databaseName(url);
-  if (!name.endsWith("_load")) {
-    throw new Error(`Refusing to seed "${name}": the load database's name must end in "_load".`);
-  }
   if (!/^[a-z0-9_]+$/.test(name)) throw new Error(`Unexpected database name "${name}".`);
 
   // Create it if missing (connected to the server's default "postgres" database).
