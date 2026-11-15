@@ -10,7 +10,9 @@ name: hacker-house
 
 services:
   postgres:
-    image: postgres:18-alpine
+    # 17 = the newest major Supabase (production) offers: local and CI run what production runs.
+    # Changing the major version needs `bun run infra:reset` (data files differ per major).
+    image: postgres:17-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-hacker}
@@ -30,8 +32,8 @@ services:
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     volumes:
-      # Postgres 18 images keep data under /var/lib/postgresql/<major>/docker.
-      - pgdata:/var/lib/postgresql
+      # Postgres 17 images keep data in /var/lib/postgresql/data (18+ moved it one level up).
+      - pgdata:/var/lib/postgresql/data
       # Runs ONLY when the data volume is empty (first start or after infra:reset).
       - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:

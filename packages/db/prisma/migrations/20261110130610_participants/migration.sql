@@ -1,6 +1,6 @@
 -- CreateTable
 CREATE TABLE "participants" (
-    "id" UUID NOT NULL DEFAULT uuidv7(),
+    "id" UUID NOT NULL DEFAULT gen_uuidv7(),
     "user_id" UUID NOT NULL,
     "hackathon_id" UUID NOT NULL,
     "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,

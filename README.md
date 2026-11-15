@@ -20,7 +20,7 @@ Requires [Bun](https://bun.sh) 1.3+ and Docker.
 ```sh
 bun install
 cp .env.example .env   # single env file for the whole repo (root)
-bun run infra:up       # Postgres 18 (127.0.0.1:5433) + Redis (127.0.0.1:6379), waits until healthy
+bun run infra:up       # Postgres 17 (127.0.0.1:5433) + Redis (127.0.0.1:6379), waits until healthy
 bun run db:deploy      # apply migrations
 bun run dev            # web app on http://localhost:3000
 ```

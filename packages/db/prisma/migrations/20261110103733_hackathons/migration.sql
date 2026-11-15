@@ -1,6 +1,6 @@
 -- CreateTable
 CREATE TABLE "hackathons" (
-    "id" UUID NOT NULL DEFAULT uuidv7(),
+    "id" UUID NOT NULL DEFAULT gen_uuidv7(),
     "name" TEXT NOT NULL,
     "slug" TEXT NOT NULL,
     "description" TEXT NOT NULL DEFAULT '',

@@ -17,7 +17,7 @@ ADD COLUMN     "team_joined_at" TIMESTAMPTZ;
 
 -- CreateTable
 CREATE TABLE "teams" (
-    "id" UUID NOT NULL DEFAULT uuidv7(),
+    "id" UUID NOT NULL DEFAULT gen_uuidv7(),
     "hackathon_id" UUID NOT NULL,
     "name" TEXT NOT NULL,
     "description" TEXT NOT NULL DEFAULT '',
@@ -36,7 +36,7 @@ CREATE TABLE "teams" (
 
 -- CreateTable
 CREATE TABLE "invite_codes" (
-    "id" UUID NOT NULL DEFAULT uuidv7(),
+    "id" UUID NOT NULL DEFAULT gen_uuidv7(),
     "team_id" UUID NOT NULL,
     "code" TEXT NOT NULL,
     "expires_at" TIMESTAMPTZ NOT NULL,
@@ -49,7 +49,7 @@ CREATE TABLE "invite_codes" (
 
 -- CreateTable
 CREATE TABLE "audit_logs" (
-    "id" UUID NOT NULL DEFAULT uuidv7(),
+    "id" UUID NOT NULL DEFAULT gen_uuidv7(),
     "hackathon_id" UUID,
     "team_id" UUID,
     "actor_user_id" UUID,

@@ -1,6 +1,6 @@
 -- CreateTable
 CREATE TABLE "idempotency_keys" (
-    "id" UUID NOT NULL DEFAULT uuidv7(),
+    "id" UUID NOT NULL DEFAULT gen_uuidv7(),
     "user_id" UUID NOT NULL,
     "key" TEXT NOT NULL,
     "request_hash" TEXT NOT NULL,

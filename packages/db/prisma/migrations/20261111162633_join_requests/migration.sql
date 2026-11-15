@@ -6,7 +6,7 @@ CREATE TYPE "decline_reason" AS ENUM ('LEADER', 'TEAM_FULL');
 
 -- CreateTable
 CREATE TABLE "join_requests" (
-    "id" UUID NOT NULL DEFAULT uuidv7(),
+    "id" UUID NOT NULL DEFAULT gen_uuidv7(),
     "hackathon_id" UUID NOT NULL,
     "participant_id" UUID NOT NULL,
     "team_id" UUID NOT NULL,

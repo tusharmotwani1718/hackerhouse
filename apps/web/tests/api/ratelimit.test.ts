@@ -43,7 +43,10 @@ test("reads: RateLimit-* headers count down; over the limit → 429 + Retry-Afte
   expect(limited.error?.details).toMatchObject({ rule: "read.user" });
   const retryAfter = Number(limited.headers.get("retry-after"));
   expect(retryAfter).toBeGreaterThan(0);
-  expect(retryAfter).toBeLessThanOrEqual(60);
+  // Sliding window: this window is full (3/3), so wait for the next one to start, then until
+  // these 3 have decayed to 2: (60 − elapsed) + 60 × (1 − 2/3) → at most 80 s, not 60. (A ≤ 60
+  // bound failed whenever the burst fell in the first 20 s of Redis's window.)
+  expect(retryAfter).toBeLessThanOrEqual(80);
 
   // Keys are per user: someone else isn't affected by my burst.
   expect((await api("GET", "/api/me", { cookie: other!.cookie })).status).toBe(200);
