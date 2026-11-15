@@ -27,6 +27,8 @@ export async function startApp(env: Record<string, string> = {}): Promise<() => 
     },
     stdout: "pipe",
     stderr: "pipe",
+    // POSIX: its own process group, so killTree can stop the parent and its `node` child together.
+    detached: process.platform !== "win32",
   });
 
   try {
@@ -46,7 +48,7 @@ export async function startApp(env: Record<string, string> = {}): Promise<() => 
 
 /**
  * Stop the server AND its children. `bun x next start` runs Next in a child `node` process;
- * on Windows, killing the parent leaves that child alive, still holding the port.
+ * killing only the parent leaves that child alive, still holding the port.
  */
 function killTree(pid: number): void {
   if (process.platform === "win32") {
@@ -55,7 +57,13 @@ function killTree(pid: number): void {
       stderr: "ignore",
     });
   } else {
-    process.kill(pid);
+    // Linux/macOS: killing only the parent orphans the `node` child, which keeps the port (a CI
+    // runner's next test file would then fail). A negative pid signals the whole group.
+    try {
+      process.kill(-pid, "SIGTERM");
+    } catch {
+      // already gone
+    }
   }
 }
 

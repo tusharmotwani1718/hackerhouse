@@ -76,6 +76,8 @@ const server = Bun.spawn([process.execPath, "x", "next", "start", "-p", String(L
   },
   stdout: "inherit",
   stderr: "inherit",
+  // POSIX: its own process group, so killTree can stop the parent and its `node` child together.
+  detached: process.platform !== "win32",
 });
 
 let stopping = false;
@@ -109,7 +111,7 @@ Stop with Ctrl+C.`);
 
 /**
  * Stop the server AND its children: `bun x next start` runs Next in a child `node` process, and
- * on Windows killing only the parent leaves that child holding the port.
+ * killing only the parent leaves that child holding the port (Windows and Linux alike).
  */
 function killTree(pid: number): void {
   if (process.platform === "win32") {
@@ -118,7 +120,13 @@ function killTree(pid: number): void {
       stderr: "ignore",
     });
   } else {
-    process.kill(pid);
+    // Linux/macOS: killing only the parent orphans the `node` child, which keeps the port (a CI
+    // runner's next test file would then fail). A negative pid signals the whole group.
+    try {
+      process.kill(-pid, "SIGTERM");
+    } catch {
+      // already gone
+    }
   }
 }
 
