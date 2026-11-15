@@ -99,9 +99,7 @@ export function MyTeamTabs({
       </div>
 
       {/* Hidden, not unmounted: the inbox and log keep their tab/page state. */}
-      <div className={sub === "details" ? "block" : "hidden"}>
-        {children}
-      </div>
+      <div className={sub === "details" ? "block" : "hidden"}>{children}</div>
       {sub === "details" ? null : seatsLeft === 0 ? (
         <div className="rounded-xl border border-dashed px-6 py-16 text-center">
           <p className="font-medium">Your team is full</p>

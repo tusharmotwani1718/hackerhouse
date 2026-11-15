@@ -79,8 +79,16 @@ test("one user joins two teams at once → exactly one join (10 rounds)", async 
     const [leaderA, leaderB, joiner] = await createUsers(3, `r${round}`);
     const [pA, pB] = await registerAll(hackathon.id, [leaderA!, leaderB!]);
     await registerAll(hackathon.id, [joiner!]);
-    const teamA = await createTeam({ hackathonId: hackathon.id, maxSize: 4, memberParticipantIds: [pA!.id] });
-    const teamB = await createTeam({ hackathonId: hackathon.id, maxSize: 4, memberParticipantIds: [pB!.id] });
+    const teamA = await createTeam({
+      hackathonId: hackathon.id,
+      maxSize: 4,
+      memberParticipantIds: [pA!.id],
+    });
+    const teamB = await createTeam({
+      hackathonId: hackathon.id,
+      maxSize: 4,
+      memberParticipantIds: [pB!.id],
+    });
 
     const results = await Promise.all([
       joinTeam(joiner!.cookie, teamA.id),
@@ -102,7 +110,11 @@ test("same key sent 50 times → one join, 49 identical replays", async () => {
   const [leader, joiner] = await createUsers(2, "key");
   const [pLeader] = await registerAll(hackathon.id, [leader!]);
   await registerAll(hackathon.id, [joiner!]);
-  const team = await createTeam({ hackathonId: hackathon.id, maxSize: 4, memberParticipantIds: [pLeader!.id] });
+  const team = await createTeam({
+    hackathonId: hackathon.id,
+    maxSize: 4,
+    memberParticipantIds: [pLeader!.id],
+  });
 
   const key = randomUUID();
   const results = await Promise.all(
@@ -112,9 +124,10 @@ test("same key sent 50 times → one join, 49 identical replays", async () => {
   expect(results.every((r) => r.status === 200)).toBe(true);
   expect(new Set(results.map((r) => JSON.stringify(r.body))).size).toBe(1); // identical bodies
   expect(results.filter((r) => r.replayed)).toHaveLength(49);
-  const after = await db.team.findUniqueOrThrow({ where: { id: team.id }, select: { memberCount: true } });
+  const after = await db.team.findUniqueOrThrow({
+    where: { id: team.id },
+    select: { memberCount: true },
+  });
   expect(after.memberCount).toBe(2);
   expect(await db.idempotencyKey.count({ where: { key } })).toBe(1);
 }, 60_000);
-
-

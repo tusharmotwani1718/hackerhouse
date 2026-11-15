@@ -110,7 +110,7 @@ function applyEvent(
   if (index >= 0) {
     // Shown: replace only with a NEWER version (duplicates / out-of-order events are ignored);
     // drop it if it no longer fits (filled up, stopped looking, …).
-    
+
     if (card.version <= state.teams[index]!.version) return state; // incoming version is less than what we already have
     if (!fits) {
       return {
